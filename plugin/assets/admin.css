@@ -1,0 +1,49 @@
+.ai-generator {
+    max-width: 1000px;
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 25px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+#generationResults {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+}
+
+.generated-articles {
+    display: grid;
+    gap: 20px;
+}
+
+.article {
+    padding: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.loading {
+    text-align: center;
+    padding: 30px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.spinner {
+    margin: 0 auto 15px;
+}
+
+.post-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+}

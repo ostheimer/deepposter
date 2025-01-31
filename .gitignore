@@ -1,0 +1,6 @@
+*.log
+.env
+wp-config.php
+docker/.data
+plugin/includes/vendor
+.DS_Store
