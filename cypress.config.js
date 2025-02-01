@@ -12,8 +12,8 @@ module.exports = defineConfig({
     },
     baseUrl: 'http://localhost:8000',
     env: {
-      wpUsername: 'admin',
-      wpPassword: 'admin'
+      wpUsername: 'deepposter',
+      wpPassword: 'deepposter'
     },
     supportFile: 'cypress/support/e2e.js'
   },

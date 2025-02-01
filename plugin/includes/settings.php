@@ -8,8 +8,15 @@ add_action('admin_init', function() {
     register_setting('deepposter_settings', 'deepposter_deepseek_key');
     
     // Model Settings
-    register_setting('deepposter_settings', 'deepposter_model');
-    register_setting('deepposter_settings', 'deepposter_max_tokens');
+    register_setting('deepposter_settings', 'deepposter_model', array(
+        'default' => 'gpt-4'
+    ));
+    register_setting('deepposter_settings', 'deepposter_max_tokens', array(
+        'default' => 10000
+    ));
+    register_setting('deepposter_settings', 'deepposter_temperature', array(
+        'default' => 0.7
+    ));
 
     add_settings_section(
         'provider_settings',
@@ -158,6 +165,25 @@ add_action('admin_init', function() {
                     <br>- GPT-4 Modelle: bis zu 128000 Tokens
                     <br>- GPT-3.5-Turbo-16k: bis zu 16000 Tokens
                     <br>- Andere Modelle: bis zu 8000 Tokens
+                  </p>';
+            echo '</div>';
+        },
+        'deepposter_settings',
+        'provider_settings'
+    );
+
+    add_settings_field(
+        'temperature',
+        'Temperature',
+        function() {
+            $value = get_option('deepposter_temperature', 0.7);
+            echo '<div class="deepposter-settings-field">';
+            echo '<input type="number" id="temperature" name="deepposter_temperature" 
+                  min="0" max="1" step="0.1" value="'.$value.'">';
+            echo '<p class="description">
+                    Die Temperatur für die Generierung von Antworten.
+                    <br>0 = Kreativität
+                    <br>1 = Konservativität
                   </p>';
             echo '</div>';
         },

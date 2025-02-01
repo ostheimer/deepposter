@@ -1,0 +1,90 @@
+.deepposter-settings-field {
+    margin-bottom: 20px;
+}
+
+.deepposter-settings-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.deepposter-settings-field select,
+.deepposter-settings-field input[type="text"],
+.deepposter-settings-field input[type="number"] {
+    width: 350px;
+    height: 40px;
+    padding: 5px 10px;
+}
+
+.deepposter-settings-field textarea {
+    font-family: monospace;
+    padding: 10px;
+    line-height: 1.4;
+}
+
+.deepposter-settings-field .description {
+    margin-top: 5px;
+    color: #666;
+    font-style: italic;
+}
+
+#generationResults {
+    margin-top: 20px;
+}
+
+.generation-item {
+    background: #fff;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+}
+
+.generation-item h3 {
+    margin: 0 0 10px 0;
+    color: #23282d;
+}
+
+.generation-item p {
+    margin: 5px 0;
+}
+
+.generation-item a {
+    text-decoration: none;
+    margin-right: 10px;
+}
+
+.error {
+    color: #dc3232;
+    padding: 10px;
+    background: #fbeaea;
+    border-left: 4px solid #dc3232;
+    margin: 10px 0;
+}
+
+#deepposter-result {
+    margin-top: 20px;
+}
+
+#deepposter-result .notice {
+    margin-left: 0;
+}
+
+#deepposter-result ul {
+    margin-top: 10px;
+    margin-bottom: 0;
+}
+
+#deepposter-result li {
+    margin-bottom: 5px;
+}
+
+#deepposter-result li:last-child {
+    margin-bottom: 0;
+}
+
+.spinner {
+    float: none;
+    margin: 0;
+    visibility: visible;
+} 

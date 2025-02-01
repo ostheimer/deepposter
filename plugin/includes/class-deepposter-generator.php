@@ -26,16 +26,47 @@ class DeepPoster_Generator {
     /**
      * Generiert die angegebene Anzahl von Artikeln
      */
-    public function generate_posts($category_id, $count, $should_publish) {
+    public function generate_posts($category_id, $count = 1, $should_publish = false, $custom_prompt = '') {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Starte Artikelgenerierung:');
+            error_log('Category ID: ' . $category_id);
+            error_log('Count: ' . $count);
+            error_log('Should Publish: ' . ($should_publish ? 'true' : 'false'));
+            error_log('Custom Prompt: ' . $custom_prompt);
+            error_log('API Key: ' . (empty($this->api_key) ? 'Nicht gesetzt' : 'Vorhanden'));
+            error_log('API Provider: ' . $this->api_provider);
+            error_log('Model: ' . $this->model);
+        }
+
         $category = get_category($category_id);
         if (!$category) {
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - Kategorie nicht gefunden: ' . $category_id);
+            }
             throw new Exception('Kategorie nicht gefunden.');
+        }
+
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Kategorie gefunden: ' . $category->name);
         }
 
         $generated_posts = array();
         for ($i = 0; $i < $count; $i++) {
-            $post = $this->generate_single_post($category, $should_publish);
-            $generated_posts[] = $post;
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - Generiere Artikel ' . ($i + 1) . ' von ' . $count);
+            }
+            try {
+                $post = $this->generate_single_post($category, $should_publish, $custom_prompt);
+                $generated_posts[] = $post;
+            } catch (Exception $e) {
+                error_log('DeepPoster Debug - Fehler bei Artikel ' . ($i + 1) . ': ' . $e->getMessage());
+                continue;
+            }
+        }
+
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Generierung abgeschlossen. Anzahl Artikel: ' . count($generated_posts));
+            error_log('DeepPoster Debug - Generierte Artikel: ' . print_r($generated_posts, true));
         }
 
         return $generated_posts;
@@ -44,10 +75,18 @@ class DeepPoster_Generator {
     /**
      * Generiert einen einzelnen Artikel
      */
-    private function generate_single_post($category, $should_publish = false) {
+    private function generate_single_post($category, $should_publish = false, $custom_prompt = '') {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Starte Einzelartikelgenerierung');
+        }
+
         // Erstelle den Prompt für OpenAI
-        $prompt = $this->create_prompt($category);
+        $prompt = empty($custom_prompt) ? $this->create_prompt($category) : $this->create_custom_prompt($category, $custom_prompt);
         
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Prompt erstellt: ' . print_r($prompt, true));
+        }
+
         // Sende Anfrage an OpenAI
         $response = $this->call_openai_api($prompt);
         
@@ -55,9 +94,18 @@ class DeepPoster_Generator {
             throw new Exception('Keine Antwort von OpenAI erhalten.');
         }
 
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - OpenAI Antwort erhalten: ' . print_r($response, true));
+        }
+
         // Extrahiere Titel und Inhalt aus der Antwort
         $content = $response['choices'][0]['message']['content'];
         list($title, $body) = $this->parse_content($content);
+
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Extrahierter Titel: ' . $title);
+            error_log('DeepPoster Debug - Extrahierter Body (Länge): ' . strlen($body));
+        }
 
         // Erstelle den WordPress-Artikel
         $post_data = array(
@@ -68,23 +116,33 @@ class DeepPoster_Generator {
             'post_category' => array($category->term_id)
         );
 
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Erstelle WordPress-Artikel mit Daten: ' . print_r($post_data, true));
+        }
+
         $post_id = wp_insert_post($post_data);
 
         if (is_wp_error($post_id)) {
-            throw new Exception('Fehler beim Erstellen des Artikels: ' . $post_id->get_error_message());
+            $error_message = 'Fehler beim Erstellen des Artikels: ' . $post_id->get_error_message();
+            error_log('DeepPoster Debug - ' . $error_message);
+            throw new Exception($error_message);
+        }
+
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Artikel erstellt mit ID: ' . $post_id);
         }
 
         return array(
-            'id' => $post_id,
             'title' => $title,
-            'excerpt' => wp_trim_words($body, 20),
+            'category' => $category->name,
             'status' => $should_publish ? 'publish' : 'draft',
-            'edit_url' => get_edit_post_link($post_id, 'raw')
+            'editUrl' => get_edit_post_link($post_id, 'raw'),
+            'viewUrl' => get_permalink($post_id)
         );
     }
 
     /**
-     * Erstellt den Prompt für OpenAI
+     * Erstellt den Standard-Prompt für OpenAI
      */
     private function create_prompt($category) {
         return array(
@@ -106,9 +164,35 @@ class DeepPoster_Generator {
     }
 
     /**
+     * Erstellt einen benutzerdefinierten Prompt für OpenAI
+     */
+    private function create_custom_prompt($category, $custom_prompt) {
+        // Ersetze Platzhalter
+        $prompt_text = str_replace('[KATEGORIE]', $category->name, $custom_prompt);
+        
+        return array(
+            array(
+                'role' => 'system',
+                'content' => $prompt_text
+            ),
+            array(
+                'role' => 'user',
+                'content' => "Erstelle einen Artikel für die Kategorie '{$category->name}'."
+            )
+        );
+    }
+
+    /**
      * Sendet die Anfrage an die OpenAI API
      */
     private function call_openai_api($messages) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - OpenAI API Aufruf:');
+            error_log('API URL: ' . $this->api_url);
+            error_log('Model: ' . $this->model);
+            error_log('Messages: ' . print_r($messages, true));
+        }
+
         $args = array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $this->api_key,
@@ -123,20 +207,41 @@ class DeepPoster_Generator {
             'timeout' => 60
         );
 
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Request Daten:');
+            error_log(print_r($args, true));
+        }
+
         $response = wp_remote_post($this->api_url, $args);
 
         if (is_wp_error($response)) {
-            throw new Exception('API-Fehler: ' . $response->get_error_message());
+            $error_message = 'API-Fehler: ' . $response->get_error_message();
+            error_log('DeepPoster Debug - ' . $error_message);
+            throw new Exception($error_message);
         }
 
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (empty($data) || !isset($data['choices'][0]['message']['content'])) {
-            throw new Exception('Ungültige Antwort von OpenAI');
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code !== 200) {
+            $error_message = 'API-Fehler: Status ' . $status_code;
+            error_log('DeepPoster Debug - ' . $error_message);
+            error_log('DeepPoster Debug - Response: ' . wp_remote_retrieve_body($response));
+            throw new Exception($error_message);
         }
 
-        return $data;
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (empty($body) || !isset($body['choices'][0]['message']['content'])) {
+            $error_message = 'Ungültige API-Antwort';
+            error_log('DeepPoster Debug - ' . $error_message);
+            error_log('DeepPoster Debug - Response Body: ' . print_r($body, true));
+            throw new Exception($error_message);
+        }
+
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - API Antwort erfolgreich:');
+            error_log(print_r($body, true));
+        }
+
+        return $body;
     }
 
     /**

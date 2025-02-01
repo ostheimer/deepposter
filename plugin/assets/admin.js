@@ -77,14 +77,23 @@ jQuery(document).ready(function($) {
         saveErrorLogs();
     });
 
+    // Prompt bei Kategorieänderung aktualisieren
+    $('#categorySelect').on('change', function() {
+        const category = $(this).find('option:selected').text();
+        const currentPrompt = $('#promptText').val();
+        const updatedPrompt = currentPrompt.replace(/\[KATEGORIE\]/g, category);
+        $('#promptText').val(updatedPrompt);
+    });
+
+    // Formular absenden
     $('#aiGeneratorForm').on('submit', function(e) {
         e.preventDefault();
         
         const $form = $(this);
-        const $submitButton = $form.find(':submit');
+        const $submitButton = $form.find('button[type="submit"]');
         const $results = $('#generationResults');
         
-        // Disable submit button
+        // Deaktiviere Submit-Button
         $submitButton.prop('disabled', true);
         
         // Show loading message
@@ -96,7 +105,8 @@ jQuery(document).ready(function($) {
             nonce: deepposter.nonce,
             category: $('#categorySelect').val(),
             count: $('#articleCount').val(),
-            publish: $('#publishImmediately').is(':checked')
+            publish: $('#publishImmediately').is(':checked'),
+            prompt: $('#promptText').val()
         };
         
         // Send AJAX request
@@ -136,6 +146,7 @@ jQuery(document).ready(function($) {
                 `);
             })
             .always(function() {
+                // Aktiviere Submit-Button wieder
                 $submitButton.prop('disabled', false);
             });
     });

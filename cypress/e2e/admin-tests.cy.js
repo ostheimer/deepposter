@@ -24,26 +24,31 @@ describe('DeepPoster Admin Tests', () => {
       };
     });
 
-    // Login vor jedem Test
-    cy.login();
-
-    // Setup console spying
-    cy.window().then((win) => {
-      cy.spy(win.console, 'log').as('consoleLog');
-      cy.spy(win.console, 'error').as('consoleError');
-      cy.spy(win.console, 'warn').as('consoleWarn');
-    });
-
     // Ignoriere unbehandelte Ausnahmen für alle Tests
     Cypress.on('uncaught:exception', (err, runnable) => {
       return false;
     });
-  })
+
+    cy.log('Starte Test-Vorbereitung');
+    cy.login();
+    cy.url().then(url => {
+      cy.log(`Aktuelle URL nach Login: ${url}`);
+    });
+    
+    cy.visit('/wp-admin/admin.php?page=deepposter').then(() => {
+      cy.log('Navigiere zur DeepPoster Admin-Seite');
+      cy.url().then(url => {
+        cy.log(`Aktuelle URL nach Navigation: ${url}`);
+      });
+    });
+  });
 
   it('should load DeepPoster admin page', () => {
-    cy.visitDeepPoster()
-    cy.get('.ai-generator h1').should('contain', 'DeepPoster')
-  })
+    cy.visitDeepPoster();
+    cy.wait(2000);
+    cy.debugPage();
+    cy.get('.wrap h2').should('contain', 'DeepPoster');
+  });
 
   it('should show settings page', () => {
     cy.visitDeepPoster('-settings')
@@ -251,28 +256,57 @@ describe('DeepPoster Admin Tests', () => {
   });
 
   it('sollte die Struktur der Einstellungsseite analysieren', () => {
-    // Besuche direkt die Einstellungsseite
-    cy.visit('/wp-admin/admin.php?page=deepposter-settings');
+    cy.log('Starte Test: Struktur der Einstellungsseite');
+    cy.visit('/wp-admin/admin.php?page=deepposter').then(() => {
+      cy.log('Seite besucht');
+    });
+    cy.wait(2000);
+    cy.debugPage();
+    cy.get('#aiGeneratorForm').should('be.visible').then(() => {
+      cy.log('Formular gefunden');
+    });
+    cy.get('#promptText').should('be.visible');
+    cy.get('#categorySelect').should('be.visible');
+    cy.get('#articleCount').should('be.visible');
+    cy.get('#publishImmediately').should('be.visible');
+  });
+
+  it('sollte einen Artikel mit Standard-Prompt generieren', () => {
+    cy.log('Starte Test: Artikel generieren');
+    cy.visit('/wp-admin/admin.php?page=deepposter').then(() => {
+        cy.log('Seite besucht');
+    });
+    cy.wait(2000);
+    cy.debugPage();
     
-    // Warte bis die Seite geladen ist
-    cy.contains('h2', 'AI Provider Einstellungen').should('be.visible');
-    
-    // Logge die gesamte Seitenstruktur
-    cy.document().then((doc) => {
-      cy.log('Seitenstruktur:', doc.body.innerHTML);
+    // Überprüfe und aktualisiere das Prompt
+    cy.get('#promptText').should('be.visible').then(($textarea) => {
+        const promptText = $textarea.val();
+        cy.log('Aktuelles Prompt:', promptText);
+        // Stelle sicher, dass das Prompt nicht leer ist
+        expect(promptText).to.not.be.empty;
     });
     
-    // Suche nach dem Token-Input-Feld
-    cy.get('#max_tokens').then(($el) => {
-      // Logge das Element und seine Eigenschaften
-      cy.log('Token Input Element:', $el[0].outerHTML);
-      cy.log('Token Input Parent:', $el.parent()[0].outerHTML);
-    });
+    // Wähle Kategorie und Einstellungen
+    cy.get('#categorySelect').select('1');
+    cy.get('#articleCount').select('1');
+    cy.get('#publishImmediately').check();
+    cy.get('button[type="submit"]').click();
     
-    // Mache einen Screenshot der gesamten Seite
-    cy.screenshot('settings-page-structure', {
-      capture: 'viewport',
-      blackout: ['input[type="password"]']
+    // Warte auf Erfolgsmeldung im generation-results Container
+    cy.get('#generationResults', { timeout: 30000 }).within(() => {
+        cy.get('.generation-item', { timeout: 30000 }).should('be.visible');
+        cy.get('.generation-item h3').should('exist');
+        cy.get('.generation-meta').should('contain', 'Status:');
+        cy.get('.generation-actions').should('exist');
+    });
+
+    // Überprüfe, ob der Artikel in der WordPress-Admin-Liste erscheint
+    cy.visit('/wp-admin/edit.php');
+    cy.get('#the-list').should('not.be.empty');
+    cy.get('#the-list tr').first().within(() => {
+        cy.get('.column-title').should('exist');
+        cy.get('.column-date').should('exist');
     });
   });
 

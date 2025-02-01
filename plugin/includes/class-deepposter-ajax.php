@@ -61,6 +61,7 @@ class DeepPoster_Ajax {
         $category_id = isset($_POST['category']) ? intval($_POST['category']) : 0;
         $count = isset($_POST['count']) ? intval($_POST['count']) : 1;
         $should_publish = isset($_POST['publish']) ? (bool)$_POST['publish'] : false;
+        $custom_prompt = isset($_POST['prompt']) ? sanitize_textarea_field($_POST['prompt']) : '';
 
         if ($category_id <= 0) {
             wp_send_json_error('Bitte wählen Sie eine Kategorie aus.');
@@ -69,6 +70,11 @@ class DeepPoster_Ajax {
 
         if ($count < 1 || $count > 10) {
             wp_send_json_error('Die Anzahl der Artikel muss zwischen 1 und 10 liegen.');
+            return;
+        }
+
+        if (empty($custom_prompt)) {
+            wp_send_json_error('Bitte geben Sie ein Prompt ein.');
             return;
         }
 
@@ -81,7 +87,7 @@ class DeepPoster_Ajax {
 
         try {
             $generator = new DeepPoster_Generator($api_key);
-            $posts = $generator->generate_posts($category_id, $count, $should_publish);
+            $posts = $generator->generate_posts($category_id, $count, $should_publish, $custom_prompt);
             
             wp_send_json_success($posts);
         } catch (Exception $e) {

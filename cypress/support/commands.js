@@ -64,4 +64,24 @@ Cypress.Commands.add('getConsoleLogs', () => {
 Cypress.Commands.add('clearConsoleLogs', () => {
     logs.length = 0;
     return cy.wrap(null);
+});
+
+Cypress.Commands.add('debugPage', () => {
+  cy.log('Debugging Seitenstruktur');
+  
+  cy.document().then((doc) => {
+    // Logge den HTML-Inhalt des Body
+    cy.log('Body HTML Struktur:');
+    cy.log(doc.body.innerHTML);
+    
+    // Überprüfe spezifische Elemente
+    const aiGenerator = doc.querySelector('.ai-generator');
+    const deepposterForm = doc.querySelector('#deepposter-form');
+    const deepposterPrompt = doc.querySelector('#deepposter-prompt');
+    
+    cy.log('Gefundene Elemente:');
+    cy.log(`ai-generator: ${aiGenerator ? 'gefunden' : 'nicht gefunden'}`);
+    cy.log(`deepposter-form: ${deepposterForm ? 'gefunden' : 'nicht gefunden'}`);
+    cy.log(`deepposter-prompt: ${deepposterPrompt ? 'gefunden' : 'nicht gefunden'}`);
+  });
 }); 

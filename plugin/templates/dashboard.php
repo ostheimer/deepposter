@@ -5,6 +5,20 @@
     
     <form id="aiGeneratorForm" class="deepposter-form">
         <div class="deepposter-settings-field">
+            <label for="promptText">Prompt Vorschau & Anpassung:</label>
+            <textarea id="promptText" name="prompt" rows="10" style="width: 100%; margin-top: 10px;"><?php
+                echo esc_textarea(
+                    'Du bist ein professioneller Content-Ersteller für WordPress-Blogs. ' .
+                    'Erstelle einen gut strukturierten Artikel in der Kategorie \'[KATEGORIE]\'. ' .
+                    'Der Artikel sollte informativ, gut recherchiert und SEO-optimiert sein. ' .
+                    'Formatiere den Artikel mit WordPress-kompatiblem HTML und strukturiere ihn mit Überschriften (h2, h3). ' .
+                    'Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt.'
+                );
+            ?></textarea>
+            <p class="description">Hier können Sie das Prompt anpassen, das an die KI gesendet wird. Die Platzhalter [KATEGORIE] werden automatisch ersetzt.</p>
+        </div>
+
+        <div class="deepposter-settings-field">
             <label for="categorySelect">Kategorie auswählen:</label>
             <select id="categorySelect" name="category">
                 <option value="">Kategorie wählen</option>

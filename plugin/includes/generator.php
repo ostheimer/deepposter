@@ -129,24 +129,80 @@ class DeepPosterGenerator {
 
 // AJAX Handler für die Content-Generierung
 add_action('wp_ajax_deepposter_generate', function() {
+    if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+        error_log('DeepPoster Debug - AJAX Handler gestartet');
+        error_log('POST Daten: ' . print_r($_POST, true));
+    }
+
     check_ajax_referer('deepposter_nonce', 'nonce');
     
     if (!current_user_can('edit_posts')) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Keine Berechtigung');
+        }
         wp_send_json_error('Keine Berechtigung');
+        return;
     }
 
     $category = intval($_POST['category']);
     $count = min(5, max(1, intval($_POST['count'])));
     $publish = !empty($_POST['publish']);
+    $prompt = isset($_POST['prompt']) ? sanitize_textarea_field($_POST['prompt']) : '';
 
-    $generator = new DeepPosterGenerator();
-    $posts = $generator->generate_posts($category, $count, $publish);
-
-    if (is_wp_error($posts)) {
-        wp_send_json_error($posts->get_error_message());
+    if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+        error_log('DeepPoster Debug - Verarbeitete Eingaben:');
+        error_log('Kategorie: ' . $category);
+        error_log('Anzahl: ' . $count);
+        error_log('Veröffentlichen: ' . ($publish ? 'ja' : 'nein'));
+        error_log('Prompt Länge: ' . strlen($prompt));
     }
 
-    wp_send_json_success($posts);
+    if (empty($category)) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Keine Kategorie ausgewählt');
+        }
+        wp_send_json_error('Bitte wählen Sie eine Kategorie aus.');
+        return;
+    }
+
+    if (empty($prompt)) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Kein Prompt angegeben');
+        }
+        wp_send_json_error('Bitte geben Sie ein Prompt ein.');
+        return;
+    }
+
+    $api_key = get_option('deepposter_openai_key');
+    if (empty($api_key)) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Kein API Key konfiguriert');
+        }
+        wp_send_json_error('Bitte hinterlegen Sie zuerst Ihren OpenAI API Key in den Einstellungen.');
+        return;
+    }
+
+    try {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Starte Generator');
+        }
+
+        $generator = new DeepPosterGenerator();
+        $posts = $generator->generate_posts($category, $count, $publish, $prompt);
+
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Generierung erfolgreich:');
+            error_log(print_r($posts, true));
+        }
+
+        wp_send_json_success($posts);
+    } catch (Exception $e) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Fehler bei der Generierung: ' . $e->getMessage());
+            error_log('Stack Trace: ' . $e->getTraceAsString());
+        }
+        wp_send_json_error($e->getMessage());
+    }
 });
 
 // AJAX Handler für das Laden der OpenAI Modelle
