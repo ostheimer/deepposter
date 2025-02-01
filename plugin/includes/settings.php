@@ -20,17 +20,80 @@ add_action('admin_init', function() {
         'deepposter_settings'
     );
 
+    // Füge CSS für einheitliches Design hinzu
+    add_action('admin_head', function() {
+        ?>
+        <style>
+            .deepposter-settings-field {
+                margin-bottom: 20px;
+            }
+            .deepposter-settings-field label {
+                display: inline-block;
+                min-width: 150px;
+                margin-bottom: 5px;
+                font-weight: 600;
+            }
+            .deepposter-settings-field input[type="text"],
+            .deepposter-settings-field input[type="password"],
+            .deepposter-settings-field input[type="number"],
+            .deepposter-settings-field select {
+                width: 350px !important;
+                height: 40px !important;
+                padding: 8px 12px !important;
+                font-size: 14px !important;
+                line-height: 1.5 !important;
+                border: 1px solid #8c8f94 !important;
+                border-radius: 4px !important;
+                background-color: #fff !important;
+            }
+            .deepposter-settings-field input:focus,
+            .deepposter-settings-field select:focus {
+                border-color: #2271b1 !important;
+                box-shadow: 0 0 0 1px #2271b1 !important;
+                outline: none !important;
+            }
+            .deepposter-settings-field .description {
+                margin-top: 8px;
+                color: #646970;
+                font-size: 13px;
+            }
+            .deepposter-settings-field input[type="number"]::-webkit-inner-spin-button,
+            .deepposter-settings-field input[type="number"]::-webkit-outer-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+            .deepposter-settings-field input[type="number"] {
+                -moz-appearance: textfield;
+            }
+            .model-selection-wrapper {
+                display: inline-block;
+                width: 350px;
+            }
+            #loading-models {
+                height: 40px;
+                line-height: 40px;
+                padding: 0 12px;
+                background: #f0f0f1;
+                border: 1px solid #8c8f94;
+                border-radius: 4px;
+            }
+        </style>
+        <?php
+    });
+
     // API Provider Selection
     add_settings_field(
         'api_provider',
         'KI-Anbieter',
         function() {
             $provider = get_option('deepposter_api_provider', 'openai');
+            echo '<div class="deepposter-settings-field">';
             echo '<select name="deepposter_api_provider" id="api_provider">
                     <option value="openai" '.selected($provider, 'openai', false).'>OpenAI</option>
                     <option value="deepseek" '.selected($provider, 'deepseek', false).'>DeepSeek</option>
                     <option value="anthropic" '.selected($provider, 'anthropic', false).'>Anthropic</option>
                   </select>';
+            echo '</div>';
         },
         'deepposter_settings',
         'provider_settings'
@@ -42,7 +105,9 @@ add_action('admin_init', function() {
         'OpenAI API Key',
         function() {
             $value = esc_attr(get_option('deepposter_openai_key'));
-            echo '<input type="password" name="deepposter_openai_key" value="'.$value.'" class="regular-text">';
+            echo '<div class="deepposter-settings-field">';
+            echo '<input type="password" name="deepposter_openai_key" value="'.$value.'">';
+            echo '</div>';
         },
         'deepposter_settings',
         'provider_settings'
@@ -53,7 +118,9 @@ add_action('admin_init', function() {
         'DeepSeek API Key',
         function() {
             $value = esc_attr(get_option('deepposter_deepseek_key'));
-            echo '<input type="password" name="deepposter_deepseek_key" value="'.$value.'" class="regular-text">';
+            echo '<div class="deepposter-settings-field">';
+            echo '<input type="password" name="deepposter_deepseek_key" value="'.$value.'">';
+            echo '</div>';
         },
         'deepposter_settings',
         'provider_settings'
@@ -65,12 +132,14 @@ add_action('admin_init', function() {
         'Modellauswahl',
         function() {
             $model = get_option('deepposter_model', 'gpt-4');
+            echo '<div class="deepposter-settings-field">';
             echo '<div class="model-selection-wrapper">
                     <select name="deepposter_model" id="model_selection" style="display: none;">
                         <option value="">Lade Modelle...</option>
                     </select>
                     <div id="loading-models" class="loading-indicator">Lade Modelle<span class="dots">...</span></div>
                   </div>';
+            echo '</div>';
         },
         'deepposter_settings',
         'provider_settings'
@@ -81,15 +150,16 @@ add_action('admin_init', function() {
         'Maximale Tokens',
         function() {
             $value = get_option('deepposter_max_tokens', 10000);
+            echo '<div class="deepposter-settings-field">';
             echo '<input type="number" id="max_tokens" name="deepposter_max_tokens" 
-                  min="1" max="128000" step="1" value="'.$value.'" 
-                  style="width: 150px; padding: 5px;">';
+                  min="1" max="128000" step="1" value="'.$value.'">';
             echo '<p class="description">
                     Maximale Anzahl der Tokens pro Anfrage. Empfohlene Werte:
-                    <br>- GPT-4 Modelle: bis zu 128.000 Tokens
-                    <br>- GPT-3.5-Turbo-16k: bis zu 16.000 Tokens
-                    <br>- Andere Modelle: bis zu 8.000 Tokens
+                    <br>- GPT-4 Modelle: bis zu 128000 Tokens
+                    <br>- GPT-3.5-Turbo-16k: bis zu 16000 Tokens
+                    <br>- Andere Modelle: bis zu 8000 Tokens
                   </p>';
+            echo '</div>';
         },
         'deepposter_settings',
         'provider_settings'
