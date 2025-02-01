@@ -9,6 +9,7 @@ class DeepPoster_Ajax {
      */
     public function __construct() {
         add_action('wp_ajax_deepposter_save_logs', array($this, 'save_logs'));
+        add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
     }
 
     /**
@@ -48,5 +49,43 @@ class DeepPoster_Ajax {
             'message' => 'Logs erfolgreich gespeichert',
             'file' => basename($log_file)
         ));
+    }
+
+    /**
+     * Generiert Artikel basierend auf den Formularparametern
+     */
+    public function generate_articles() {
+        check_ajax_referer('deepposter_nonce', 'nonce');
+
+        // Validiere Eingaben
+        $category_id = isset($_POST['category']) ? intval($_POST['category']) : 0;
+        $count = isset($_POST['count']) ? intval($_POST['count']) : 1;
+        $should_publish = isset($_POST['publish']) ? (bool)$_POST['publish'] : false;
+
+        if ($category_id <= 0) {
+            wp_send_json_error('Bitte wählen Sie eine Kategorie aus.');
+            return;
+        }
+
+        if ($count < 1 || $count > 10) {
+            wp_send_json_error('Die Anzahl der Artikel muss zwischen 1 und 10 liegen.');
+            return;
+        }
+
+        // Hole OpenAI API Key
+        $api_key = get_option('deepposter_openai_key');
+        if (empty($api_key)) {
+            wp_send_json_error('Bitte hinterlegen Sie zuerst Ihren OpenAI API Key in den Einstellungen.');
+            return;
+        }
+
+        try {
+            $generator = new DeepPoster_Generator($api_key);
+            $posts = $generator->generate_posts($category_id, $count, $should_publish);
+            
+            wp_send_json_success($posts);
+        } catch (Exception $e) {
+            wp_send_json_error('Fehler bei der Artikelgenerierung: ' . $e->getMessage());
+        }
     }
 } 
