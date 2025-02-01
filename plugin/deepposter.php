@@ -66,24 +66,35 @@ class DeepPoster {
             'deepposter-admin',
             plugins_url('assets/admin.css', __FILE__),
             [],
-            filemtime(plugin_dir_path(__FILE__) . 'assets/admin.css')
+            DEEPPOSTER_VERSION
         );
 
         wp_enqueue_script(
             'deepposter-js',
             plugins_url('assets/admin.js', __FILE__),
-            ['jquery', 'jquery-ui-datepicker'],
-            filemtime(plugin_dir_path(__FILE__) . 'assets/admin.js'),
+            ['jquery'],
+            DEEPPOSTER_VERSION,
             true
         );
 
-        wp_localize_script('deepposter-js', 'deepposter', [
+        // Debug-Ausgabe für Entwicklung
+        if (DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Hook: ' . $hook);
+            error_log('DeepPoster Debug - OpenAI Key vorhanden: ' . (get_option('deepposter_openai_key') ? 'Ja' : 'Nein'));
+        }
+
+        wp_localize_script('deepposter-js', 'deepposter', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('deepposter_nonce'),
-            'i18n' => [
-                'select_date' => __('Datum auswählen', 'deepposter')
-            ]
-        ]);
+            'openai_key' => !empty(get_option('deepposter_openai_key')),
+            'debug' => DEEPPOSTER_DEBUG,
+            'i18n' => array(
+                'select_date' => __('Datum auswählen', 'deepposter'),
+                'loading_models' => __('Lade Modelle...', 'deepposter'),
+                'no_api_key' => __('Kein OpenAI API Key konfiguriert', 'deepposter'),
+                'error_loading' => __('Fehler beim Laden der Modelle:', 'deepposter')
+            )
+        ));
     }
 
     public function dashboard_ui() {

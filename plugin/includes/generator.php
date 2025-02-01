@@ -147,4 +147,79 @@ add_action('wp_ajax_deepposter_generate', function() {
     }
 
     wp_send_json_success($posts);
+});
+
+// AJAX Handler für das Laden der OpenAI Modelle
+add_action('wp_ajax_deepposter_get_models', function() {
+    check_ajax_referer('deepposter_nonce', 'nonce');
+    
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Keine Berechtigung');
+    }
+
+    $api_key = get_option('deepposter_openai_key');
+    if (!$api_key) {
+        wp_send_json_error('Kein OpenAI API Key konfiguriert');
+    }
+
+    if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+        error_log('DeepPoster Debug - Starte API-Anfrage an OpenAI');
+    }
+
+    $response = wp_remote_get('https://api.openai.com/v1/models', [
+        'headers' => [
+            'Authorization' => 'Bearer ' . $api_key,
+            'Content-Type' => 'application/json'
+        ],
+        'timeout' => 15
+    ]);
+
+    if (is_wp_error($response)) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - API-Fehler: ' . $response->get_error_message());
+        }
+        wp_send_json_error('API-Fehler: ' . $response->get_error_message());
+    }
+
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code !== 200) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Ungültiger Status Code: ' . $status_code);
+        }
+        wp_send_json_error('API-Fehler: Status ' . $status_code);
+    }
+
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+    if (empty($body['data']) || !is_array($body['data'])) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Ungültige API-Antwort: ' . print_r($body, true));
+        }
+        wp_send_json_error('Ungültige API-Antwort');
+    }
+
+    // Filtere nur die Chat-Modelle
+    $chat_models = array_filter($body['data'], function($model) {
+        return strpos($model['id'], 'gpt') !== false;
+    });
+
+    if (empty($chat_models)) {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Keine GPT-Modelle gefunden');
+        }
+        wp_send_json_success([]); // Leeres Array, aber success=true
+    }
+
+    // Formatiere die Modelle für die Anzeige
+    $formatted_models = array_map(function($model) {
+        return [
+            'id' => $model['id'],
+            'name' => ucwords(str_replace('-', ' ', $model['id']))
+        ];
+    }, $chat_models);
+
+    if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+        error_log('DeepPoster Debug - Gefundene Modelle: ' . print_r($formatted_models, true));
+    }
+
+    wp_send_json_success(array_values($formatted_models)); // Stellt sicher, dass es ein Array ist
 }); 

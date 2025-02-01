@@ -65,16 +65,12 @@ add_action('admin_init', function() {
         'Modellauswahl',
         function() {
             $model = get_option('deepposter_model', 'gpt-4');
-            echo '<select name="deepposter_model" id="model_selection">
-                    <optgroup label="OpenAI">
-                      <option value="gpt-4" '.selected($model, 'gpt-4', false).'>GPT-4</option>
-                      <option value="gpt-3.5-turbo" '.selected($model, 'gpt-3.5-turbo', false).'>GPT-3.5 Turbo</option>
-                    </optgroup>
-                    <optgroup label="DeepSeek">
-                      <option value="deepseek-chat" '.selected($model, 'deepseek-chat', false).'>DeepSeek Chat</option>
-                      <option value="deepseek-coder" '.selected($model, 'deepseek-coder', false).'>DeepSeek Coder</option>
-                    </optgroup>
-                  </select>';
+            echo '<div class="model-selection-wrapper">
+                    <select name="deepposter_model" id="model_selection" style="display: none;">
+                        <option value="">Lade Modelle...</option>
+                    </select>
+                    <div id="loading-models" class="loading-indicator">Lade Modelle<span class="dots">...</span></div>
+                  </div>';
         },
         'deepposter_settings',
         'provider_settings'
