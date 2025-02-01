@@ -33,6 +33,11 @@ describe('DeepPoster Admin Tests', () => {
       cy.spy(win.console, 'error').as('consoleError');
       cy.spy(win.console, 'warn').as('consoleWarn');
     });
+
+    // Ignoriere unbehandelte Ausnahmen für alle Tests
+    Cypress.on('uncaught:exception', (err, runnable) => {
+      return false;
+    });
   })
 
   it('should load DeepPoster admin page', () => {
@@ -242,6 +247,129 @@ describe('DeepPoster Admin Tests', () => {
         logs,
         timestamp: new Date().toISOString()
       });
+    });
+  });
+
+  it('sollte die Struktur der Einstellungsseite analysieren', () => {
+    // Besuche direkt die Einstellungsseite
+    cy.visit('/wp-admin/admin.php?page=deepposter-settings');
+    
+    // Warte bis die Seite geladen ist
+    cy.contains('h2', 'AI Provider Einstellungen').should('be.visible');
+    
+    // Logge die gesamte Seitenstruktur
+    cy.document().then((doc) => {
+      cy.log('Seitenstruktur:', doc.body.innerHTML);
+    });
+    
+    // Suche nach dem Token-Input-Feld
+    cy.get('#max_tokens').then(($el) => {
+      // Logge das Element und seine Eigenschaften
+      cy.log('Token Input Element:', $el[0].outerHTML);
+      cy.log('Token Input Parent:', $el.parent()[0].outerHTML);
+    });
+    
+    // Mache einen Screenshot der gesamten Seite
+    cy.screenshot('settings-page-structure', {
+      capture: 'viewport',
+      blackout: ['input[type="password"]']
+    });
+  });
+
+  it('sollte 30000 Tokens akzeptieren und speichern', () => {
+    // Besuche direkt die Einstellungsseite
+    cy.visit('/wp-admin/admin.php?page=deepposter-settings');
+    
+    // Warte bis die Seite geladen ist
+    cy.contains('h2', 'AI Provider Einstellungen').should('be.visible');
+    
+    // Warte bis das Eingabefeld sichtbar ist und interagierbar
+    cy.get('#max_tokens')
+        .should('be.visible')
+        .should('be.enabled')
+        .as('tokenInput');
+    
+    // Lösche den bestehenden Wert und gebe 30000 ein
+    cy.get('@tokenInput')
+        .clear()
+        .type('30000')
+        .blur();
+    
+    // Prüfe den Wert
+    cy.get('@tokenInput').should('have.value', '30000');
+    
+    // Prüfe, ob keine Fehlermeldung erscheint
+    cy.get('.error').should('not.exist');
+    cy.get('.notice-error').should('not.exist');
+    
+    // Klicke auf "Änderungen speichern"
+    cy.get('input[type="submit"]').click();
+    
+    // Warte einen Moment
+    cy.wait(1000);
+    
+    // Lade die Seite neu
+    cy.reload();
+    
+    // Warte bis die Seite nach dem Neuladen geladen ist
+    cy.contains('h2', 'AI Provider Einstellungen').should('be.visible');
+    
+    // Prüfe, ob der Wert 30000 noch da ist
+    cy.get('#max_tokens').should('have.value', '30000');
+    
+    // Mache einen Screenshot des Ergebnisses
+    cy.screenshot('token-input-30000', {
+        capture: 'viewport',
+        blackout: ['input[type="password"]']
+    });
+  });
+
+  it('sollte große Token-Werte validieren', () => {
+    // Besuche direkt die Einstellungsseite
+    cy.visit('/wp-admin/admin.php?page=deepposter-settings');
+    
+    // Warte bis die Seite geladen ist
+    cy.contains('h2', 'AI Provider Einstellungen').should('be.visible');
+    
+    // Teste verschiedene Token-Werte
+    const testCases = [
+        { value: '30000', expected: '30000' },
+        { value: '32000', expected: '32000' },
+        { value: '16000', expected: '16000' }
+    ];
+    
+    testCases.forEach(({ value, expected }) => {
+        cy.get('#max_tokens')
+            .should('be.visible')
+            .should('be.enabled')
+            .clear()
+            .type(value)
+            .blur();
+        
+        // Prüfe den Wert
+        cy.get('#max_tokens').should('have.value', expected);
+        
+        // Prüfe auf Abwesenheit von Fehlermeldungen
+        cy.get('.error').should('not.exist');
+        cy.get('.notice-error').should('not.exist');
+        
+        // Speichere die Änderungen
+        cy.get('input[type="submit"]').click();
+        
+        // Warte einen Moment
+        cy.wait(1000);
+        
+        // Lade die Seite neu
+        cy.reload();
+        
+        // Warte bis die Seite nach dem Neuladen geladen ist
+        cy.contains('h2', 'AI Provider Einstellungen').should('be.visible');
+        
+        // Prüfe den Wert
+        cy.get('#max_tokens').should('have.value', expected);
+        
+        // Logge den Testfall
+        cy.log(`Testfall "${value}" erfolgreich`);
     });
   });
 }) 

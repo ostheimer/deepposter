@@ -140,6 +140,95 @@ jQuery(document).ready(function($) {
             });
     });
 
+    // Token Input Validierung und Formatierung
+    const $tokenInput = $('#max_tokens');
+    
+    // Formatiere die Zahl ohne Tausender-Trennzeichen
+    function formatNumber(num) {
+        if (num === undefined || num === null || num === '') {
+            return '0';
+        }
+        return num.toString();
+    }
+
+    // Entferne alle Nicht-Zahlen aus dem Input
+    function cleanNumber(str) {
+        if (typeof str !== 'string') {
+            str = String(str || '');
+        }
+        return str.replace(/[^\d]/g, '');
+    }
+
+    // Aktualisiere den Token-Input mit der Zahl
+    function updateTokenInput(value) {
+        if (!value) {
+            value = '10000';
+        }
+        
+        const cleanValue = cleanNumber(value);
+        const numValue = parseInt(cleanValue, 10) || 10000;
+        
+        // Validiere den Bereich
+        let finalValue;
+        if (numValue > 128000) {
+            finalValue = 128000;
+            alert('Die maximale Token-Anzahl ist 128000');
+        } else if (numValue < 1) {
+            finalValue = 10000;
+        } else {
+            finalValue = numValue;
+        }
+        
+        // Speichere den ursprünglichen Wert als Data-Attribut
+        $tokenInput.attr('data-value', finalValue);
+        
+        // Zeige die Zahl im Input
+        $tokenInput.val(finalValue.toString());
+    }
+
+    // Event Handler für Token Input
+    $tokenInput
+        .on('focus', function() {
+            // Beim Fokus: Zeige unformatierte Zahl
+            const value = cleanNumber($(this).val());
+            $(this).val(value);
+        })
+        .on('blur', function() {
+            // Beim Verlassen: Formatiere die Zahl
+            updateTokenInput($(this).val());
+        })
+        .on('input', function() {
+            // Während der Eingabe: Erlaube nur Zahlen
+            const value = cleanNumber($(this).val());
+            $(this).val(value);
+        });
+
+    // Setze Standard-Token-Anzahl basierend auf Modell
+    function updateDefaultTokens(modelId) {
+        if (!$tokenInput.val()) {
+            let defaultTokens = 8000;
+            
+            if (modelId.includes('gpt-4')) {
+                defaultTokens = 32000;
+            } else if (modelId.includes('gpt-3.5-turbo-16k')) {
+                defaultTokens = 16000;
+            }
+            
+            updateTokenInput(defaultTokens.toString());
+        }
+    }
+
+    // Model Selection Change Handler
+    $('#model_selection').on('change', function() {
+        const selectedModel = $(this).val();
+        updateDefaultTokens(selectedModel);
+    });
+
+    // Initialisiere Token-Formatierung
+    if ($tokenInput.length) {
+        updateTokenInput($tokenInput.val() || '2000');
+    }
+
     // Funktion zum Laden der OpenAI Modelle
     function loadOpenAIModels() {
         console.log('Starte Laden der OpenAI Modelle...');
@@ -254,16 +343,7 @@ jQuery(document).ready(function($) {
                 $loading.hide();
 
                 // Setze Standard-Token-Anzahl basierend auf Modell
-                const $tokenInput = $('#max_tokens');
-                if (!$tokenInput.val()) {
-                    if (currentModel.includes('gpt-4')) {
-                        $tokenInput.val(32000); // Höhere Token-Anzahl für GPT-4 Modelle
-                    } else if (currentModel.includes('gpt-3.5-turbo-16k')) {
-                        $tokenInput.val(16000); // 16k Variante
-                    } else {
-                        $tokenInput.val(8000); // Standard für andere Modelle
-                    }
-                }
+                updateDefaultTokens($select.val());
 
                 // Debug-Ausgabe der finalen Auswahl
                 console.log('Finale Modellauswahl:', $select.val());

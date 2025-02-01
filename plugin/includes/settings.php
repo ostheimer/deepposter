@@ -80,9 +80,16 @@ add_action('admin_init', function() {
         'max_tokens',
         'Maximale Tokens',
         function() {
-            $value = get_option('deepposter_max_tokens', 2000);
-            echo '<input type="number" name="deepposter_max_tokens" 
-                  min="500" max="4000" value="'.$value.'">';
+            $value = get_option('deepposter_max_tokens', 10000);
+            echo '<input type="number" id="max_tokens" name="deepposter_max_tokens" 
+                  min="1" max="128000" step="1" value="'.$value.'" 
+                  style="width: 150px; padding: 5px;">';
+            echo '<p class="description">
+                    Maximale Anzahl der Tokens pro Anfrage. Empfohlene Werte:
+                    <br>- GPT-4 Modelle: bis zu 128.000 Tokens
+                    <br>- GPT-3.5-Turbo-16k: bis zu 16.000 Tokens
+                    <br>- Andere Modelle: bis zu 8.000 Tokens
+                  </p>';
         },
         'deepposter_settings',
         'provider_settings'
