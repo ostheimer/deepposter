@@ -1,12 +1,11 @@
-version: '3.8'
-
 services:
   wordpress:
     image: wordpress:php8.2
+    platform: linux/arm64/v8
     ports:
       - "8000:80"
     volumes:
-      - ./../plugin:/var/www/html/wp-content/plugins/ai-blog-generator
+      - ./../plugin:/var/www/html/wp-content/plugins/deepposter
       - wordpress_data:/var/www/html
     environment:
       WORDPRESS_DB_HOST: db
@@ -18,7 +17,8 @@ services:
       - db
 
   db:
-    image: mysql:5.7
+    image: mysql:8.0
+    platform: linux/arm64/v8
     volumes:
       - db_data:/var/lib/mysql
     environment:
