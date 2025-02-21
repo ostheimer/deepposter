@@ -1,0 +1,10 @@
+.env
+wp-config.php
+docker/.data
+plugin/includes/vendor
+.DS_Store
+
+# Cypress files
+!cypress/screenshots/**/*
+!cypress/logs/*.log
+cypress/logs/

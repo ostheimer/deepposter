@@ -1,0 +1,32 @@
+services:
+  wordpress:
+    image: wordpress:php8.2
+    platform: linux/arm64/v8
+    ports:
+      - "8000:80"
+    volumes:
+      - ./../plugin:/var/www/html/wp-content/plugins/deepposter
+      - wordpress_data:/var/www/html
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wpuser
+      WORDPRESS_DB_PASSWORD: wppass
+      WORDPRESS_DB_NAME: wpdb
+      WORDPRESS_DEBUG: 1
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    platform: linux/arm64/v8
+    volumes:
+      - db_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: wpdb
+      MYSQL_USER: wpuser
+      MYSQL_PASSWORD: wppass
+
+volumes:
+  wordpress_data:
+  db_data:
