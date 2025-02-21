@@ -1,4 +1,21 @@
-<?php defined('ABSPATH') || exit; ?>
+<?php
+/**
+ * Dashboard Template
+ */
+
+// Setze UTF-8 Encoding
+if (!defined('ABSPATH')) {
+    header('Content-Type: text/html; charset=utf-8');
+}
+
+defined('ABSPATH') || exit;
+?>
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+</head>
 
 <div class="wrap">
     <h2>DeepPoster</h2>
@@ -13,9 +30,15 @@
                             get_option('deepposter_prompt',
                                 'Du bist ein professioneller Content-Ersteller für WordPress-Blogs. ' .
                                 'Der Artikel sollte informativ, gut recherchiert und SEO-optimiert sein. ' .
-                                'Formatiere den Artikel mit WordPress-kompatiblem HTML und strukturiere ihn mit Überschriften (h2, h3). ' .
-                                'Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt. ' .
-                                'Schreibe über: [KATEGORIE]'
+                                'Formatiere den Artikel wie folgt:\n' .
+                                '1. Erste Zeile: NUR den Titel ohne HTML-Tags oder Formatierung\n' .
+                                '2. Eine Leerzeile\n' .
+                                '3. Den Artikelinhalt mit WordPress-kompatiblem HTML\n' .
+                                '4. Verwende h2 und h3 Tags NUR für Zwischenüberschriften im Artikelinhalt, NICHT für den Haupttitel\n' .
+                                '5. Nach dem Artikelinhalt eine Leerzeile und dann "SCHLAGWORTE:" gefolgt von genau 7 SEO-optimierten Schlagwörtern\n' .
+                                '6. Die Schlagwörter MÜSSEN im Text vorkommen und mindestens 2 davon auch im Titel\n' .
+                                '7. Schlagwörter mit Komma trennen und klein schreiben\n' .
+                                'Thema des Beitrags: [KATEGORIE]'
                             )
                         );
                     ?></textarea>
@@ -374,9 +397,9 @@ jQuery(document).ready(function($) {
         const category = $(this).find('option:selected').text();
         debugLog('Kategorie geändert zu: ' + category);
         const currentPrompt = $('#promptText').val();
-        // Entferne alte Kategorie am Ende und füge neue hinzu
-        const promptWithoutCategory = currentPrompt.replace(/Schreibe über:.*$/, '').trim();
-        const updatedPrompt = promptWithoutCategory + ' Schreibe über: ' + category;
+        // Entferne altes Thema am Ende und füge neues hinzu
+        const promptWithoutCategory = currentPrompt.replace(/Thema des Beitrags:.*$/, '').trim();
+        const updatedPrompt = promptWithoutCategory + ' Thema des Beitrags: ' + category;
         $('#promptText').val(updatedPrompt);
     });
 
