@@ -12,10 +12,10 @@
                         echo esc_textarea(
                             get_option('deepposter_prompt',
                                 'Du bist ein professioneller Content-Ersteller für WordPress-Blogs. ' .
-                                'Erstelle einen gut strukturierten Artikel in der Kategorie \'[KATEGORIE]\'. ' .
                                 'Der Artikel sollte informativ, gut recherchiert und SEO-optimiert sein. ' .
                                 'Formatiere den Artikel mit WordPress-kompatiblem HTML und strukturiere ihn mit Überschriften (h2, h3). ' .
-                                'Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt.'
+                                'Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt. ' .
+                                'Schreibe über: [KATEGORIE]'
                             )
                         );
                     ?></textarea>
@@ -374,7 +374,9 @@ jQuery(document).ready(function($) {
         const category = $(this).find('option:selected').text();
         debugLog('Kategorie geändert zu: ' + category);
         const currentPrompt = $('#promptText').val();
-        const updatedPrompt = currentPrompt.replace(/\[KATEGORIE\]/g, category);
+        // Entferne alte Kategorie am Ende und füge neue hinzu
+        const promptWithoutCategory = currentPrompt.replace(/Schreibe über:.*$/, '').trim();
+        const updatedPrompt = promptWithoutCategory + ' Schreibe über: ' + category;
         $('#promptText').val(updatedPrompt);
     });
 
@@ -443,6 +445,18 @@ jQuery(document).ready(function($) {
             prompt: $('#promptText').val()
         };
         
+        // Logge den Prompt und die Einstellungen
+        debugLog('Starte Artikelgenerierung...', 'info');
+        debugLog('------------------------', 'info');
+        debugLog('Einstellungen:', 'info');
+        debugLog(`Kategorie: ${$('#categorySelect option:selected').text()}`, 'info');
+        debugLog(`Anzahl Artikel: ${formData.count}`, 'info');
+        debugLog(`Sofort veröffentlichen: ${formData.publish ? 'Ja' : 'Nein'}`, 'info');
+        debugLog('------------------------', 'info');
+        debugLog('Sende Prompt an KI:', 'info');
+        debugLog(formData.prompt, 'info');
+        debugLog('------------------------', 'info');
+        
         // Sende AJAX-Request
         $.post(deepposter.ajaxurl, formData)
             .done(function(response) {
@@ -450,12 +464,23 @@ jQuery(document).ready(function($) {
                     // Zeige generierte Artikel an
                     let html = '<div class="notice notice-success"><p>Artikel erfolgreich generiert:</p>';
                     response.data.forEach(function(post) {
+                        // Logge Details für jeden generierten Artikel
+                        debugLog(`Artikel generiert (ID: ${post.id})`, 'success');
+                        debugLog(`Titel: ${post.title}`, 'info');
+                        debugLog(`Kategorie: ${post.category}`, 'info');
+                        debugLog(`Status: ${post.status}`, 'info');
+                        if (post.tags && post.tags.length > 0) {
+                            debugLog(`Schlagwörter: ${post.tags.join(', ')}`, 'info');
+                        }
+                        debugLog('------------------------', 'info');
+
                         html += `
                             <div class="generation-item">
                                 <h4>${post.title}</h4>
                                 <div class="generation-meta">
-                                    Kategorie: ${post.category}
-                                    Status: ${post.status}
+                                    <div>Kategorie: ${post.category}</div>
+                                    <div>Status: ${post.status}</div>
+                                    ${post.tags ? `<div>Schlagwörter: ${post.tags.join(', ')}</div>` : ''}
                                 </div>
                                 <div class="generation-actions">
                                     <a href="${post.editUrl}" class="button" target="_blank">Bearbeiten</a>
@@ -466,15 +491,24 @@ jQuery(document).ready(function($) {
                     html += '</div>';
                     $resultContainer.html(html);
                 } else {
-                    // Zeige Fehlermeldung
+                    // Logge Fehler
+                    debugLog('Fehler bei der Artikelgenerierung:', 'error');
+                    debugLog(response.data, 'error');
+                    debugLog('------------------------', 'error');
                     $resultContainer.html(`<div class="notice notice-error"><p>${response.data}</p></div>`);
                 }
             })
             .fail(function(xhr, status, error) {
-                // Zeige Fehlermeldung bei AJAX-Fehler
+                // Logge AJAX-Fehler
+                debugLog('AJAX-Fehler bei der Artikelgenerierung:', 'error');
+                debugLog(`Status: ${status}`, 'error');
+                debugLog(`Fehler: ${error}`, 'error');
+                debugLog('------------------------', 'error');
                 $resultContainer.html(`<div class="notice notice-error"><p>Ein Fehler ist aufgetreten: ${error}</p></div>`);
             })
             .always(function() {
+                debugLog('Artikelgenerierung abgeschlossen', 'info');
+                debugLog('------------------------', 'info');
                 // Aktiviere Submit-Button wieder
                 $submitButton.prop('disabled', false);
                 $submitButton.text('Artikel generieren');
