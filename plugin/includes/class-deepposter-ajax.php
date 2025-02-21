@@ -10,6 +10,8 @@ class DeepPoster_Ajax {
     public function __construct() {
         add_action('wp_ajax_deepposter_save_logs', array($this, 'save_logs'));
         add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
+        add_action('wp_ajax_deepposter_save_prompt', array($this, 'save_prompt'));
+        add_action('wp_ajax_deepposter_get_prompt', array($this, 'get_prompt'));
     }
 
     /**
@@ -158,6 +160,65 @@ class DeepPoster_Ajax {
                 error_log('Stack Trace: ' . $e->getTraceAsString());
             }
             wp_send_json_error($e->getMessage());
+        }
+    }
+
+    /**
+     * Speichert den benutzerdefinierten Prompt
+     */
+    public function save_prompt() {
+        // Überprüfe Nonce
+        if (!check_ajax_referer('deepposter_nonce', 'nonce', false)) {
+            wp_send_json_error('Ungültiger Sicherheitstoken.');
+            return;
+        }
+
+        // Überprüfe Berechtigungen
+        if (!current_user_can('edit_posts')) {
+            wp_send_json_error('Keine Berechtigung.');
+            return;
+        }
+
+        // Hole und validiere den Prompt
+        $prompt = isset($_POST['prompt']) ? sanitize_textarea_field($_POST['prompt']) : '';
+        if (empty($prompt)) {
+            wp_send_json_error('Kein Prompt angegeben.');
+            return;
+        }
+
+        // Speichere den Prompt
+        $result = update_option('deepposter_prompt', $prompt);
+
+        if ($result) {
+            wp_send_json_success('Prompt erfolgreich gespeichert.');
+        } else {
+            wp_send_json_error('Fehler beim Speichern des Prompts.');
+        }
+    }
+
+    /**
+     * Lädt den gespeicherten Prompt
+     */
+    public function get_prompt() {
+        // Überprüfe Nonce
+        if (!check_ajax_referer('deepposter_nonce', 'nonce', false)) {
+            wp_send_json_error('Ungültiger Sicherheitstoken.');
+            return;
+        }
+
+        // Überprüfe Berechtigungen
+        if (!current_user_can('edit_posts')) {
+            wp_send_json_error('Keine Berechtigung.');
+            return;
+        }
+
+        // Hole den gespeicherten Prompt
+        $prompt = get_option('deepposter_prompt', '');
+
+        if (!empty($prompt)) {
+            wp_send_json_success($prompt);
+        } else {
+            wp_send_json_error('Kein Prompt gefunden.');
         }
     }
 } 
