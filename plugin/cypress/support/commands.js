@@ -8,43 +8,97 @@
 // https://on.cypress.io/custom-commands
 // ***********************************************
 
+// Custom command for WordPress login
 Cypress.Commands.add('login', () => {
-    const username = Cypress.env('wpUsername') || 'deepposter';
-    const password = Cypress.env('wpPassword') || 'deepposter';
+    const username = Cypress.env('wpUsername');
+    const password = Cypress.env('wpPassword');
     
     cy.session([username, password], () => {
-        cy.visit('/wp-admin/');
+        cy.visit('/wp-login.php');
+        
+        // Debug-Ausgabe der aktuellen URL
+        cy.url().then(url => {
+            cy.log('Login URL:', url);
+        });
         
         // Warte auf das Login-Formular
-        cy.get('#loginform', { timeout: 10000 }).should('be.visible');
+        cy.get('#loginform').should('be.visible');
         
-        // Username eingeben
-        cy.get('#user_login')
-            .clear()
-            .type(username, { delay: 50 })
-            .should('have.value', username);
-        
-        // Passwort eingeben
-        cy.get('#user_pass')
-            .clear()
-            .type(password, { delay: 50 })
-            .should('have.value', password);
-        
-        // Submit-Button klicken
+        // Anmeldedaten eingeben
+        cy.get('#user_login').clear().type(username);
+        cy.get('#user_pass').clear().type(password);
         cy.get('#wp-submit').click();
         
         // Warte auf erfolgreiche Weiterleitung
-        cy.url({ timeout: 30000 }).should('include', '/wp-admin');
+        cy.url().should('include', '/wp-admin/');
         
-        // Warte auf Admin-Bar als Indikator für erfolgreichen Login
-        cy.get('#wpadminbar', { timeout: 10000 }).should('exist');
+        // Warte auf Admin-Bar
+        cy.get('body.wp-admin').should('exist');
+        
+        // Debug-Ausgabe der Cookies
+        cy.getCookies().then(cookies => {
+            cy.log('Cookies nach Login:', cookies);
+        });
     });
 });
 
-// Custom command für DeepPoster Navigation
+// Custom command for DeepPoster navigation
 Cypress.Commands.add('visitDeepPoster', (subpage = '') => {
-    const page = subpage ? `deepposter${subpage}` : 'deepposter';
-    cy.visit(`/wp-admin/admin.php?page=${page}`);
+    cy.login();
+    
+    // Construct the URL based on subpage
+    let url;
+    if (subpage === '-settings') {
+        url = '/wp-admin/admin.php?page=deepposter-settings';
+    } else {
+        url = '/wp-admin/admin.php?page=deepposter';
+    }
+    
+    cy.log('Navigating to:', url);
+    cy.visit(url);
+    
+    // Debug-Ausgabe
+    cy.url().then(currentUrl => {
+        cy.log('Current URL:', currentUrl);
+    });
+    
+    cy.getCookies().then(cookies => {
+        cy.log('Current Cookies:', cookies);
+    });
+    
+    // Wait for page to load
+    cy.get('body.wp-admin').should('exist');
+    
+    // Debug page content
+    cy.get('body').then($body => {
+        cy.log('Body Content:', {
+            html: $body.html(),
+            text: $body.text()
+        });
+        
+        // Log all headings
+        const headings = $body.find('h1, h2, h3, h4, h5, h6');
+        cy.log('Found Headings:', headings.length);
+        headings.each((i, el) => {
+            cy.log(`Heading ${i + 1}:`, {
+                tag: el.tagName,
+                text: el.textContent,
+                classes: el.className
+            });
+        });
+        
+        // Log all forms
+        const forms = $body.find('form');
+        cy.log('Found Forms:', forms.length);
+        forms.each((i, el) => {
+            cy.log(`Form ${i + 1}:`, {
+                id: el.id,
+                action: el.action,
+                method: el.method,
+                classes: el.className
+            });
+        });
+    });
 });
 
 // Erfasse Konsolenausgaben
@@ -98,21 +152,49 @@ Cypress.Commands.add('clearConsoleLogs', () => {
 
 // Befehl zum Debuggen der Seitenstruktur
 Cypress.Commands.add('debugPage', () => {
-    cy.log('Debugging Seitenstruktur');
+    cy.log('Debugging page structure');
     
     cy.document().then((doc) => {
-        // Logge den HTML-Inhalt des Body
-        cy.log('Body HTML Struktur:');
-        cy.log(doc.body.innerHTML);
+        // Log basic page info
+        cy.log('Page Title:', doc.title);
+        cy.log('Body Classes:', doc.body.className);
         
-        // Überprüfe spezifische Elemente
-        const aiGenerator = doc.querySelector('#aiGeneratorForm');
-        const promptText = doc.querySelector('textarea[name="prompt"]');
-        const categorySelect = doc.querySelector('select[name="category"]');
+        // Log all forms on the page
+        const forms = doc.querySelectorAll('form');
+        cy.log(`Found ${forms.length} forms on the page:`);
+        forms.forEach((form, index) => {
+            cy.log(`Form ${index + 1}:`, {
+                id: form.id,
+                className: form.className,
+                action: form.action,
+                method: form.method
+            });
+        });
         
-        cy.log('Gefundene Elemente:');
-        cy.log(`aiGeneratorForm: ${aiGenerator ? 'gefunden' : 'nicht gefunden'}`);
-        cy.log(`promptText: ${promptText ? 'gefunden' : 'nicht gefunden'}`);
-        cy.log(`categorySelect: ${categorySelect ? 'gefunden' : 'nicht gefunden'}`);
+        // Log specific elements we're looking for
+        const elements = {
+            deepposterSettingsForm: doc.querySelector('#deepposterSettingsForm'),
+            promptText: doc.querySelector('#promptText'),
+            promptSelect: doc.querySelector('#promptSelect'),
+            categorySelect: doc.querySelector('#categorySelect'),
+            savePrompt: doc.querySelector('#savePrompt')
+        };
+        
+        cy.log('Target Elements Found:', Object.entries(elements).reduce((acc, [key, el]) => {
+            acc[key] = el ? {
+                exists: true,
+                visible: el.offsetParent !== null,
+                id: el.id,
+                className: el.className
+            } : {
+                exists: false
+            };
+            return acc;
+        }, {}));
+        
+        // Log complete page structure
+        cy.log('Complete Page Structure:', {
+            html: doc.documentElement.outerHTML
+        });
     });
 }); 

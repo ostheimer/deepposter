@@ -15,6 +15,10 @@
 
 // Import commands.js using ES2015 syntax:
 import './commands'
+import '@percy/cypress'
+
+// Alternatively you can use CommonJS syntax:
+// require('./commands')
 
 // Hide fetch/XHR requests from command log
 const app = window.top;

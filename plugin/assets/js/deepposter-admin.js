@@ -1,6 +1,21 @@
 jQuery(document).ready(function($) {
-    const DEBUG = true;
+    const DEBUG = window.deepposterAdmin && window.deepposterAdmin.debug;
+    const AJAX_URL = window.deepposterAdmin ? window.deepposterAdmin.ajaxurl : '/wp-admin/admin-ajax.php';
     const debugLog = [];
+
+    // Globaler AJAX-Error-Handler
+    $(document).ajaxError(function(event, jqXHR, ajaxSettings, thrownError) {
+        log('AJAX-Fehler', {
+            status: jqXHR.status,
+            statusText: jqXHR.statusText,
+            responseText: jqXHR.responseText,
+            error: thrownError,
+            settings: ajaxSettings
+        });
+        showError('Ein Fehler ist aufgetreten: ' + jqXHR.statusText);
+        event.preventDefault();
+        return false;
+    });
 
     function log(message, data = null) {
         const timestamp = new Date().toISOString();
@@ -20,132 +35,269 @@ jQuery(document).ready(function($) {
         }
     }
 
-    // Funktion zum Anzeigen von Fehlermeldungen
-    function showError($container, message, details = null) {
-        log('Fehler aufgetreten:', { message, details });
-        let errorHtml = `<div class="notice notice-error"><p>${message}</p>`;
-        if (details && DEBUG) {
-            errorHtml += `<pre class="debug-info">${JSON.stringify(details, null, 2)}</pre>`;
+    function showError(message, error = null) {
+        console.error('DeepPoster Error - ' + message);
+        if (error) {
+            console.error(error);
         }
-        errorHtml += '</div>';
-        $container.html(errorHtml);
-        $container.addClass('notice-error');
+        $('#generationResults').prepend(
+            '<div class="notice notice-error">' +
+            '<p>' + message + '</p>' +
+            '</div>'
+        );
     }
 
-    // Funktion zum Speichern der Debug-Logs
-    function saveDebugLogs() {
-        if (!debugLog.length) return;
+    function showSuccess(message) {
+        // Bestehende Benachrichtigungen entfernen
+        $('.notice').fadeOut(300, function() {
+            $(this).remove();
+        });
 
-        $.ajax({
-            url: deepposterAdmin.ajaxurl,
+        // Neue Erfolgsmeldung erstellen
+        const $notice = $('<div class="notice notice-success"><p>' + message + '</p></div>');
+        $('#wpbody-content').prepend($notice);
+        
+        // Nach 5 Sekunden ausblenden
+        setTimeout(function() {
+            $notice.fadeOut(300, function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+
+    function loadPrompts() {
+        log('Starte loadPrompts');
+        log('AJAX URL:', AJAX_URL);
+
+        return $.ajax({
+            url: AJAX_URL,
             type: 'POST',
             data: {
-                action: 'deepposter_save_logs',
-                nonce: deepposterAdmin.nonce,
-                logs: JSON.stringify(debugLog)
-            },
-            success: function(response) {
-                log('Debug-Logs gespeichert:', response);
-            },
-            error: function(xhr, status, error) {
-                console.error('Fehler beim Speichern der Debug-Logs:', error);
+                action: 'deepposter_get_prompts',
+                nonce: window.deepposterAdmin.nonce
             }
+        })
+        .done(function(response) {
+            log('Prompt-Antwort erhalten', response);
+            
+            if (response.success && response.data && response.data.prompts) {
+                const $select = $('#promptSelect');
+                $select.find('option:not(:first)').remove();
+                
+                response.data.prompts.forEach(function(prompt) {
+                    $select.append(
+                        $('<option></option>')
+                            .val(prompt.id)
+                            .text(prompt.title)
+                    );
+                });
+
+                // Wenn ein aktiver Prompt existiert, wähle ihn aus
+                if (response.data.activePrompt) {
+                    $select.val(response.data.activePrompt);
+                    const activePrompt = response.data.prompts.find(p => p.id === response.data.activePrompt);
+                    if (activePrompt) {
+                        $('#promptText').val(activePrompt.content);
+                    }
+                }
+                
+                log('Prompts geladen', response.data.prompts);
+            } else {
+                showError('Fehler beim Laden der Prompts: ' + (response.data ? response.data.message : 'Unbekannter Fehler'));
+            }
+        })
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            showError('AJAX-Fehler beim Laden der Prompts', {
+                status: textStatus,
+                error: errorThrown,
+                response: jqXHR.responseText
+            });
         });
     }
 
-    // Standard-Prompt
-    const defaultPrompt = `Du bist ein professioneller Content-Ersteller für WordPress-Blogs. 
-Erstelle einen gut strukturierten Artikel in der Kategorie '[KATEGORIE]'. 
-Der Artikel sollte informativ, gut recherchiert und SEO-optimiert sein. 
-Formatiere den Artikel mit WordPress-kompatiblem HTML und strukturiere ihn mit Überschriften (h2, h3). 
-Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt.`;
+    // Prompt speichern
+    $('#savePrompt').on('click', function(e) {
+        e.preventDefault();
+        
+        const prompt = $('#promptText').val();
+        log('Speichere Prompt', { prompt: prompt });
+        
+        // Validierung
+        if (!prompt || prompt.trim().length === 0) {
+            showError('Bitte geben Sie einen Prompt ein');
+            return;
+        }
 
-    // Prompt-Vorschau initialisieren
-    $('#promptText').val(defaultPrompt);
+        if (prompt.length < 10) {
+            showError('Der Prompt ist zu kurz');
+            return false;
+        }
+
+        if (prompt.length > 2000) {
+            showError('Der Prompt ist zu lang');
+            return false;
+        }
+
+        const $button = $(this);
+        const originalText = $button.text();
+        $button.prop('disabled', true).text('Speichere...');
+
+        return $.ajax({
+            url: AJAX_URL,
+            type: 'POST',
+            data: {
+                action: 'deepposter_save_prompt',
+                prompt: prompt,
+                nonce: $('#deepposter_nonce').val()
+            }
+        }).then(function(response) {
+            log('Speicher-Antwort erhalten', response);
+            try {
+                if (typeof response === 'string') {
+                    response = JSON.parse(response);
+                }
+
+                if (response.success) {
+                    showSuccess('Prompt erfolgreich gespeichert');
+                    // Lade die Prompt-Liste neu
+                    return loadPrompts();
+                } else {
+                    const errorMessage = response.data && response.data.message 
+                        ? response.data.message 
+                        : 'Fehler beim Speichern des Prompts';
+                    showError(errorMessage);
+                }
+            } catch (e) {
+                log('JSON-Parsing-Fehler', e);
+                showError('Fehler beim Verarbeiten der Server-Antwort');
+            }
+        }).always(function() {
+            $button.prop('disabled', false).text(originalText);
+        });
+    });
+
+    // Prompt bei Auswahl laden
+    $('#promptSelect').on('change', function() {
+        const promptId = $(this).val();
+        if (!promptId) {
+            $('#promptText').val('');
+            return;
+        }
+
+        log('Prompt ausgewählt', { id: promptId });
+        
+        return $.ajax({
+            url: AJAX_URL,
+            type: 'POST',
+            data: {
+                action: 'deepposter_get_prompt',
+                nonce: window.deepposterAdmin.nonce,
+                prompt_id: promptId
+            }
+        }).then(function(response) {
+            log('Prompt-Lade-Antwort erhalten', response);
+            try {
+                if (typeof response === 'string') {
+                    response = JSON.parse(response);
+                }
+
+                if (response.success && response.data && response.data.content) {
+                    $('#promptText').val(response.data.content);
+                } else {
+                    showError('Fehler beim Laden des Prompts: ' + (response.data ? response.data.message : 'Unbekannter Fehler'));
+                }
+            } catch (e) {
+                log('JSON-Parsing-Fehler', e);
+                showError('Fehler beim Laden des Prompts');
+            }
+        });
+    });
 
     // Prompt bei Kategorieänderung aktualisieren
     $('#categorySelect').on('change', function() {
-        updatePromptPreview();
-    });
-
-    // Prompt-Vorschau aktualisieren
-    function updatePromptPreview() {
-        const category = $('#categorySelect option:selected').text();
+        const category = $(this).find('option:selected').text();
         const currentPrompt = $('#promptText').val();
         const updatedPrompt = currentPrompt.replace(/\[KATEGORIE\]/g, category);
         $('#promptText').val(updatedPrompt);
-    }
+    });
 
-    // Formular absenden
-    $('#aiGeneratorForm').on('submit', function(e) {
+    // Artikel generieren
+    $('form').on('submit', function(e) {
         e.preventDefault();
-        log('Formular wird abgeschickt');
+        
+        const prompt = $('#promptText').val();
+        const category = $('#categorySelect').val();
+        
+        // Validierung
+        if (!prompt || prompt.trim().length === 0) {
+            showError('Bitte geben Sie einen Prompt ein');
+            return;
+        }
+
+        if (!category) {
+            showError('Bitte wählen Sie eine Kategorie aus');
+            return;
+        }
 
         const $form = $(this);
-        const $submitButton = $form.find('button[type="submit"]');
-        const $resultContainer = $('#generationResults');
+        const $button = $form.find('button[type="submit"]');
+        const $results = $('#generationResults');
         
-        // Deaktiviere Submit-Button
-        $submitButton
-            .addClass('button button-primary')
-            .attr('disabled', 'disabled')
-            .text('Generiere...');
+        // Button deaktivieren
+        $button.prop('disabled', true).text('Generiere...');
         
-        // Zeige Lade-Animation
-        $resultContainer.removeClass('notice-error notice-success');
-        $resultContainer.html('<div class="notice notice-info"><p>Generiere Artikel...</p></div>');
-        
-        // Sammle Formulardaten
-        const formData = {
-            action: 'deepposter_generate',
-            nonce: deepposterAdmin.nonce,
-            category: $('#categorySelect').val(),
-            count: $('#articleCount').val(),
-            publish: $('#publishImmediately').is(':checked'),
-            prompt: $('#promptText').val()
-        };
-        
-        log('Sende Formulardaten:', formData);
-        
-        // Sende AJAX-Request
-        $.post(ajaxurl, formData)
-            .done(function(response) {
-                if (response.success) {
-                    // Zeige generierte Artikel an
-                    let html = '<div class="notice notice-success"><p>Artikel erfolgreich generiert:</p>';
-                    response.data.forEach(function(post) {
-                        log('Verarbeite generierten Post:', post);
-                        html += `
-                            <div class="generation-item">
-                                <h4>${post.title}</h4>
-                                <div class="generation-meta">
-                                    Kategorie: ${post.category}
-                                    Status: ${post.status}
-                                </div>
-                                <div class="generation-actions">
-                                    <a href="${post.editUrl}" class="button" target="_blank">Bearbeiten</a>
-                                    <a href="${post.viewUrl}" class="button" target="_blank">Ansehen</a>
-                                </div>
-                            </div>`;
-                    });
-                    html += '</div>';
-                    $resultContainer.html(html);
-                    $resultContainer.addClass('notice-success');
-                } else {
-                    // Zeige Fehlermeldung
-                    showError($resultContainer, response.data || 'Unbekannter Fehler');
+        // Zeige Ladeanimation
+        $results.html('<div class="notice notice-info"><p>Generiere Artikel...</p></div>');
+
+        $.ajax({
+            url: AJAX_URL,
+            type: 'POST',
+            data: {
+                action: 'deepposter_generate',
+                prompt: prompt,
+                category: category,
+                nonce: $('#deepposter_nonce').val()
+            },
+            success: function(response) {
+                try {
+                    if (typeof response === 'string') {
+                        response = JSON.parse(response);
+                    }
+
+                    if (response.success) {
+                        showSuccess('Artikel erfolgreich generiert');
+                        let html = '<div class="notice notice-success"><p>Artikel erfolgreich generiert:</p><ul>';
+                        response.data.forEach(function(post) {
+                            html += `<li>
+                                <strong>${post.title}</strong><br>
+                                Kategorie: ${post.category}<br>
+                                Status: ${post.status}<br>
+                                <a href="${post.editUrl}" target="_blank" class="button">Bearbeiten</a>
+                                <a href="${post.viewUrl}" target="_blank" class="button">Ansehen</a>
+                            </li>`;
+                        });
+                        html += '</ul></div>';
+                        $results.html(html);
+                    } else {
+                        const errorMessage = response.data && response.data.message 
+                            ? response.data.message 
+                            : 'Fehler beim Generieren des Artikels';
+                        showError(errorMessage, response);
+                    }
+                } catch (e) {
+                    console.error('DeepPoster Debug - JSON-Parsing-Fehler:', e);
+                    showError('Fehler beim Verarbeiten der Server-Antwort', e);
                 }
-            })
-            .fail(function(xhr, status, error) {
-                // Zeige Fehlermeldung bei AJAX-Fehler
-                showError($resultContainer, 'Ein Fehler ist aufgetreten: ' + error, { xhr, status, error });
-            })
-            .always(function() {
-                // Aktiviere Submit-Button wieder
-                $submitButton
-                    .removeAttr('disabled')
-                    .text('Artikel generieren');
-                saveDebugLogs();
-            });
+            },
+            complete: function() {
+                $button.prop('disabled', false).text('Artikel generieren');
+            }
+        });
+    });
+
+    // Lade die Prompts beim Start
+    log('Seite geladen');
+    loadPrompts().then(function() {
+        log('Initiales Laden der Prompts abgeschlossen');
     });
 }); 

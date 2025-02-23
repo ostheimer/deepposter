@@ -1,43 +1,84 @@
 <?php
 /**
- * Admin-Ansicht für DeepPoster
+ * Main dashboard template for DeepPoster
+ *
+ * @package DeepPoster
  */
 
-// Wenn kein direkter Zugriff
+// If this file is called directly, abort.
 if (!defined('WPINC')) {
     die;
 }
 
-// WordPress-Funktionen
-require_once dirname(dirname(dirname(dirname(__FILE__)))) . '/wp-load.php';
+// Get saved settings
+$api_provider = get_option('deepposter_api_provider', 'openai');
+$active_prompt = get_option('deepposter_active_prompt', 0);
 
 // Stelle sicher, dass die WordPress-Funktionen verfügbar sind
-require_once ABSPATH . 'wp-includes/formatting.php';
-require_once ABSPATH . 'wp-includes/category.php';
-require_once ABSPATH . 'wp-includes/pluggable.php';
+if (!defined('ABSPATH')) {
+    require_once dirname(dirname(dirname(dirname(__FILE__)))) . '/wp-load.php';
+}
+
+// Lade die benötigten JavaScript-Dateien
+wp_enqueue_script('jquery');
+wp_enqueue_script(
+    'deepposter-admin',
+    plugins_url('assets/js/deepposter-admin.js', dirname(dirname(__FILE__))),
+    array('jquery'),
+    '1.0.0',
+    true
+);
+
+// Lokalisiere das Script
+wp_localize_script(
+    'deepposter-admin',
+    'deepposterAdmin',
+    array(
+        'ajaxurl' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('deepposter_nonce'),
+        'debug' => defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG
+    )
+);
+
+// Stelle sicher, dass die Skripte geladen werden
+do_action('admin_enqueue_scripts');
 ?>
 
 <div class="wrap">
-    <h1>DeepPoster</h1>
+    <h1><?php echo esc_html__('DeepPoster Generator', 'deepposter'); ?></h1>
     
-    <form id="aiGeneratorForm" class="ai-generator" method="post" onsubmit="return false;">
+    <form id="deepposterSettingsForm" method="post">
+        <?php wp_nonce_field('deepposter_nonce', 'deepposter_nonce'); ?>
+        
         <div class="form-group">
-            <label for="promptText">Prompt Vorschau & Anpassung:</label>
-            <textarea id="promptText" name="prompt" rows="10" style="width: 100%; margin-top: 10px;"><?php
-                $default_prompt = 'Du bist ein professioneller Content-Ersteller für WordPress-Blogs. ' .
-                    'Erstelle einen gut strukturierten Artikel in der Kategorie \'[KATEGORIE]\'. ' .
-                    'Der Artikel sollte informativ, gut recherchiert und SEO-optimiert sein. ' .
-                    'Formatiere den Artikel mit WordPress-kompatiblem HTML und strukturiere ihn mit Überschriften (h2, h3). ' .
-                    'Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt.';
-                echo wp_kses_post($default_prompt);
-            ?></textarea>
-            <p class="description">Hier können Sie das Prompt anpassen, das an die KI gesendet wird. Die Platzhalter [KATEGORIE] werden automatisch ersetzt.</p>
+            <label for="promptSelect"><?php echo esc_html__('Gespeicherte Prompts:', 'deepposter'); ?></label>
+            <select id="promptSelect" name="prompt_id" style="width: 100%; margin-top: 10px;">
+                <option value=""><?php echo esc_html__('Prompt auswählen', 'deepposter'); ?></option>
+            </select>
+            <p class="description"><?php echo esc_html__('Wählen Sie einen gespeicherten Prompt aus oder erstellen Sie einen neuen.', 'deepposter'); ?></p>
         </div>
 
         <div class="form-group">
-            <label for="categorySelect">Kategorie auswählen:</label>
+            <label for="promptText"><?php echo esc_html__('Prompt Vorschau & Anpassung:', 'deepposter'); ?></label>
+            <textarea id="promptText" name="prompt" rows="10" style="width: 100%; margin-top: 10px;"><?php
+                $default_prompt = __(
+                    'Du bist ein professioneller Content-Ersteller für WordPress-Blogs. ' .
+                    'Erstelle einen gut strukturierten Artikel in der Kategorie \'[KATEGORIE]\'. ' .
+                    'Der Artikel sollte informativ, gut recherchiert und SEO-optimiert sein. ' .
+                    'Formatiere den Artikel mit WordPress-kompatiblem HTML und strukturiere ihn mit Überschriften (h2, h3). ' .
+                    'Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt.',
+                    'deepposter'
+                );
+                echo esc_textarea($default_prompt);
+            ?></textarea>
+            <p class="description"><?php echo esc_html__('Hier können Sie den Prompt anpassen, der an die KI gesendet wird.', 'deepposter'); ?></p>
+            <button type="button" id="savePrompt" class="button button-secondary"><?php echo esc_html__('Prompt speichern', 'deepposter'); ?></button>
+        </div>
+
+        <div class="form-group">
+            <label for="categorySelect"><?php echo esc_html__('Kategorie auswählen:', 'deepposter'); ?></label>
             <select id="categorySelect" name="category" required>
-                <option value="">Kategorie wählen</option>
+                <option value=""><?php echo esc_html__('Kategorie wählen', 'deepposter'); ?></option>
                 <?php
                 $categories = get_categories(array('hide_empty' => false));
                 if ($categories && !is_wp_error($categories)) {
@@ -54,7 +95,7 @@ require_once ABSPATH . 'wp-includes/pluggable.php';
         </div>
 
         <div class="form-group">
-            <label for="articleCount">Anzahl Artikel:</label>
+            <label for="articleCount"><?php echo esc_html__('Anzahl Artikel:', 'deepposter'); ?></label>
             <select id="articleCount" name="count">
                 <?php for ($i = 1; $i <= 10; $i++) : ?>
                     <option value="<?php echo esc_attr($i); ?>"><?php echo esc_html($i); ?></option>
@@ -65,108 +106,110 @@ require_once ABSPATH . 'wp-includes/pluggable.php';
         <div class="form-group">
             <label>
                 <input type="checkbox" id="publishImmediately" name="publish">
-                Sofort veröffentlichen
+                <?php echo esc_html__('Sofort veröffentlichen', 'deepposter'); ?>
             </label>
         </div>
 
         <div class="form-group">
-            <?php wp_nonce_field('deepposter_nonce', 'deepposter_nonce'); ?>
             <input type="hidden" name="action" value="deepposter_generate">
-            <button type="submit" id="generateButton" class="button button-primary">Artikel generieren</button>
+            <button type="submit" id="generateButton" class="button button-primary"><?php echo esc_html__('Artikel generieren', 'deepposter'); ?></button>
         </div>
     </form>
 
     <div id="generationResults"></div>
 </div>
 
-<script>
-var ajaxurl = '<?php echo admin_url('admin-ajax.php'); ?>';
+<style>
+.ai-generator {
+    max-width: 800px;
+    margin-top: 20px;
+}
 
-jQuery(document).ready(function($) {
-    // Debug-Logging aktivieren
-    const DEBUG = true;
-    function log(message, data = null) {
-        if (DEBUG) {
-            console.log('DeepPoster Debug -', message);
-            if (data) console.log(data);
-        }
-    }
+.form-group {
+    margin-bottom: 20px;
+}
 
-    // Prompt bei Kategorieänderung aktualisieren
-    $('#categorySelect').on('change', function() {
-        const category = $(this).find('option:selected').text();
-        const currentPrompt = $('#promptText').val();
-        const updatedPrompt = currentPrompt.replace(/\[KATEGORIE\]/g, category);
-        $('#promptText').val(updatedPrompt);
-    });
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
 
-    // AJAX-Formular-Submit
-    $('#aiGeneratorForm').on('submit', function(e) {
-        e.preventDefault();
-        
-        const $form = $(this);
-        const $button = $('#generateButton');
-        const $results = $('#generationResults');
-        
-        // Validiere Eingaben
-        const category = $('#categorySelect').val();
-        if (!category) {
-            $results.html('<div class="notice notice-error"><p>Bitte wählen Sie eine Kategorie aus.</p></div>');
-            return false;
-        }
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    margin-bottom: 10px;
+}
 
-        // Deaktiviere Button
-        $button.prop('disabled', true).text('Generiere...');
-        
-        // Zeige Ladeanimation
-        $results.html('<div class="notice notice-info"><p>Generiere Artikel...</p></div>');
-        
-        // Sammle Formulardaten
-        const formData = new FormData($form[0]);
-        
-        // Debug-Ausgabe
-        log('Sende AJAX-Anfrage:', {
-            url: ajaxurl,
-            formData: Object.fromEntries(formData)
-        });
-        
-        // Sende AJAX Request
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            success: function(response) {
-                log('AJAX-Antwort erhalten:', response);
-                if (response.success) {
-                    let html = '<div class="notice notice-success"><p>Artikel erfolgreich generiert:</p><ul>';
-                    response.data.forEach(function(post) {
-                        html += `<li>
-                            <strong>${post.title}</strong><br>
-                            Kategorie: ${post.category}<br>
-                            Status: ${post.status}<br>
-                            <a href="${post.editUrl}" target="_blank" class="button">Bearbeiten</a>
-                            <a href="${post.viewUrl}" target="_blank" class="button">Ansehen</a>
-                        </li>`;
-                    });
-                    html += '</ul></div>';
-                    $results.html(html);
-                } else {
-                    $results.html(`<div class="notice notice-error"><p>${response.data}</p></div>`);
-                }
-            },
-            error: function(xhr, status, error) {
-                log('AJAX-Fehler:', {xhr, status, error});
-                $results.html(`<div class="notice notice-error"><p>Ein Fehler ist aufgetreten: ${error}</p></div>`);
-            },
-            complete: function() {
-                // Aktiviere Button wieder
-                $button.prop('disabled', false).text('Artikel generieren');
-            }
-        });
-        
-        return false;
-    });
-});
-</script> 
+.form-group .description {
+    color: #666;
+    font-style: italic;
+    margin-top: 5px;
+}
+
+#generationResults {
+    margin-top: 20px;
+}
+
+#generationResults .notice {
+    margin: 5px 0 15px;
+}
+
+#generationResults ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+#generationResults li {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #f9f9f9;
+    border: 1px solid #e5e5e5;
+}
+
+#generationResults .button {
+    margin-right: 10px;
+    margin-top: 5px;
+}
+
+.notice {
+    margin: 20px 0;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.notice-error {
+    border-left: 4px solid #dc3232;
+    background: #fef7f7;
+}
+
+.notice-success {
+    border-left: 4px solid #46b450;
+    background: #f7fff7;
+}
+
+.notice-info {
+    border-left: 4px solid #00a0d2;
+    background: #f7fcfe;
+}
+</style>
+
+<?php
+// Deutsche Übersetzung der Hauptseite
+$translations = array(
+    'DeepPoster' => 'DeepPoster',
+    'Saved Prompts:' => 'Gespeicherte Prompts:',
+    'Select a prompt' => 'Prompt auswählen',
+    'Select a saved prompt or create a new one.' => 'Wählen Sie einen gespeicherten Prompt aus oder erstellen Sie einen neuen.',
+    'Prompt Preview & Customization:' => 'Prompt Vorschau & Anpassung:',
+    'Here you can customize the prompt that will be sent to the AI.' => 'Hier können Sie das Prompt anpassen, das an die KI gesendet wird.',
+    'The placeholders [CATEGORY] will be replaced automatically.' => 'Die Platzhalter [KATEGORIE] werden automatisch ersetzt.',
+    'Save Prompt' => 'Prompt speichern',
+    'Select Category:' => 'Kategorie auswählen:',
+    'Choose category' => 'Kategorie wählen',
+    'Number of Articles:' => 'Anzahl Artikel:',
+    'Publish Immediately' => 'Sofort veröffentlichen',
+    'Generate Articles' => 'Artikel generieren'
+);
+?> 

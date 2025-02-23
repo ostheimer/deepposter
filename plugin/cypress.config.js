@@ -12,11 +12,10 @@ module.exports = defineConfig({
     defaultCommandTimeout: 10000,
     pageLoadTimeout: 30000,
     requestTimeout: 10000,
-    responseTimeout: 30000,
+    responseTimeout: 10000,
     video: true,
     screenshotOnRunFailure: true,
     chromeWebSecurity: false,
-    experimentalSessionAndOrigin: true,
     env: {
       wpUsername: 'deepposter',
       wpPassword: 'deepposter'
@@ -29,6 +28,7 @@ module.exports = defineConfig({
           launchOptions.args.push('--disable-dev-shm-usage');
           launchOptions.args.push('--disable-gpu');
           launchOptions.args.push('--no-sandbox');
+          launchOptions.args.push('--enable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure');
         }
         return launchOptions;
       });
@@ -38,6 +38,14 @@ module.exports = defineConfig({
           console.log(message);
           return null;
         },
+        clearCookies() {
+          console.log('Clearing cookies');
+          return null;
+        },
+        getCookies() {
+          console.log('Getting cookies');
+          return null;
+        }
       });
       
       return config;

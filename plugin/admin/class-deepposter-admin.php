@@ -1,52 +1,66 @@
 <?php
 /**
- * Die Admin-spezifische Funktionalität des Plugins
+ * Manages the admin functionality of the plugin
  */
 class DeepPoster_Admin {
-
+    
     /**
-     * Initialisiert die Klasse
+     * Initializes the admin functionality
      */
     public function __construct() {
-        add_action('admin_menu', array($this, 'add_plugin_admin_menu'));
+        add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
     }
 
     /**
-     * Registriert das Plugin im Admin-Menü
+     * Adds the admin menu
      */
-    public function add_plugin_admin_menu() {
+    public function add_admin_menu() {
+        // Hauptmenü
         add_menu_page(
-            'DeepPoster', 
-            'DeepPoster',
-            'manage_options',
-            'deepposter',
-            array($this, 'display_plugin_admin_page'),
-            'dashicons-admin-generic',
-            30
+            'DeepPoster Generator',  // Seitentitel
+            'DeepPoster',           // Menütitel
+            'manage_options',       // Erforderliche Berechtigung
+            'deepposter',          // Menü-Slug
+            array($this, 'display_admin_page'),  // Callback-Funktion
+            'dashicons-format-chat',  // Icon
+            20  // Position
         );
 
+        // Generator als erstes Untermenü (damit es als aktiv markiert wird)
         add_submenu_page(
             'deepposter',
-            'DeepPoster',
-            'DeepPoster',
+            'Generator',
+            'Generator',
             'manage_options',
             'deepposter',
-            array($this, 'display_plugin_admin_page')
+            array($this, 'display_admin_page')
         );
 
+        // Prompts verwalten
         add_submenu_page(
             'deepposter',
-            'Einstellungen',
+            'Prompts',
+            'Alle Prompts',
+            'manage_options',
+            'edit.php?post_type=deepposter_prompt',
+            null
+        );
+
+        // Einstellungen
+        add_submenu_page(
+            'deepposter',
+            'DeepPoster Einstellungen',
             'Einstellungen',
             'manage_options',
             'deepposter-settings',
             array($this, 'display_plugin_settings_page')
         );
 
+        // System Status
         add_submenu_page(
             'deepposter',
-            'System Status',
+            'DeepPoster System Status',
             'System Status',
             'manage_options',
             'deepposter-status',
@@ -55,55 +69,89 @@ class DeepPoster_Admin {
     }
 
     /**
-     * Lädt die Admin-Skripte
+     * Loads the admin scripts
      */
     public function enqueue_admin_scripts($hook) {
-        if ('toplevel_page_deepposter' !== $hook) {
+        // Only load scripts on plugin pages
+        if (strpos($hook, 'deepposter') === false) {
             return;
         }
 
-        wp_enqueue_style(
+        // Register and load CSS
+        wp_register_style(
             'deepposter-admin',
-            plugin_dir_url(__FILE__) . '../assets/css/deepposter-admin.css',
+            plugins_url('../assets/css/deepposter-admin.css', __FILE__),
             array(),
             '1.0.0'
         );
+        wp_enqueue_style('deepposter-admin');
 
-        wp_enqueue_script(
+        // Register and load JavaScript
+        wp_register_script(
             'deepposter-admin',
-            plugin_dir_url(__FILE__) . '../assets/js/deepposter-admin.js',
+            plugins_url('../assets/js/deepposter-admin.js', __FILE__),
             array('jquery'),
             '1.0.0',
             true
         );
+        wp_enqueue_script('deepposter-admin');
 
+        // Localize the script
         wp_localize_script(
             'deepposter-admin',
-            'deepposterParams',
+            'deepposterAdmin',
             array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('deepposter_nonce')
             )
         );
     }
 
     /**
-     * Zeigt die Hauptseite des Plugins an
+     * Displays the main admin page (prompt generator)
      */
-    public function display_plugin_admin_page() {
+    public function display_admin_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        // Stelle sicher, dass die WordPress-Funktionen verfügbar sind
+        if (!defined('ABSPATH')) {
+            require_once dirname(dirname(dirname(__FILE__))) . '/wp-load.php';
+        }
+        
         require_once plugin_dir_path(__FILE__) . 'partials/deepposter-admin-display.php';
     }
 
     /**
-     * Zeigt die Einstellungsseite an
+     * Displays the settings page
      */
     public function display_plugin_settings_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
         require_once plugin_dir_path(__FILE__) . 'partials/deepposter-admin-settings.php';
     }
 
     /**
-     * Zeigt die Status-Seite an
+     * Displays the status page
      */
     public function display_plugin_status_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
         require_once plugin_dir_path(__FILE__) . 'partials/deepposter-admin-status.php';
     }
-} 
+}
+
+// Deutsche Übersetzungen für die Admin-Menüs
+$admin_translations = array(
+    'DeepPoster' => 'DeepPoster',
+    'Manage Prompts' => 'Prompts verwalten',
+    'Prompts' => 'Prompts',
+    'Settings' => 'Einstellungen',
+    'System Status' => 'System Status',
+    'You do not have sufficient permissions to access this page.' => 'Sie haben keine ausreichenden Berechtigungen, um auf diese Seite zuzugreifen.'
+); 

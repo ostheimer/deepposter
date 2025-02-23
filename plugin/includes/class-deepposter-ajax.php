@@ -12,6 +12,8 @@ class DeepPoster_Ajax {
         add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
         add_action('wp_ajax_deepposter_save_prompt', array($this, 'save_prompt'));
         add_action('wp_ajax_deepposter_get_prompt', array($this, 'get_prompt'));
+        add_action('wp_ajax_deepposter_get_prompts', array($this, 'get_prompts'));
+        add_action('wp_ajax_deepposter_get_prompt_content', array($this, 'get_prompt_content'));
     }
 
     /**
@@ -164,40 +166,82 @@ class DeepPoster_Ajax {
     }
 
     /**
-     * Speichert den benutzerdefinierten Prompt
+     * Speichert den benutzerdefinierten Prompt als Custom Post Type
      */
     public function save_prompt() {
-        // Überprüfe Nonce
-        if (!check_ajax_referer('deepposter_nonce', 'nonce', false)) {
-            wp_send_json_error('Ungültiger Sicherheitstoken.');
-            return;
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Starte save_prompt');
+            error_log('POST Daten: ' . print_r($_POST, true));
         }
 
-        // Überprüfe Berechtigungen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error('Keine Berechtigung.');
-            return;
-        }
+        try {
+            // Überprüfe Nonce
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'deepposter_nonce')) {
+                throw new Exception('Sicherheitsüberprüfung fehlgeschlagen.');
+            }
 
-        // Hole und validiere den Prompt
-        $prompt = isset($_POST['prompt']) ? sanitize_textarea_field($_POST['prompt']) : '';
-        if (empty($prompt)) {
-            wp_send_json_error('Kein Prompt angegeben.');
-            return;
-        }
+            // Überprüfe Berechtigungen
+            if (!current_user_can('edit_posts')) {
+                throw new Exception('Keine ausreichenden Berechtigungen.');
+            }
 
-        // Speichere den Prompt
-        $result = update_option('deepposter_prompt', $prompt);
+            // Hole und validiere den Prompt
+            $prompt_text = isset($_POST['prompt']) ? sanitize_textarea_field($_POST['prompt']) : '';
+            if (empty($prompt_text)) {
+                throw new Exception('Kein Prompt angegeben.');
+            }
 
-        if ($result) {
-            wp_send_json_success('Prompt erfolgreich gespeichert.');
-        } else {
-            wp_send_json_error('Fehler beim Speichern des Prompts.');
+            // Validiere Prompt-Länge
+            if (strlen($prompt_text) < 10) {
+                throw new Exception('Der Prompt ist zu kurz (mindestens 10 Zeichen erforderlich).');
+            }
+
+            if (strlen($prompt_text) > 2000) {
+                throw new Exception('Der Prompt ist zu lang (maximal 2000 Zeichen erlaubt).');
+            }
+
+            // Erstelle einen neuen Prompt-Post
+            $post_data = array(
+                'post_title'    => wp_trim_words($prompt_text, 10, '...'),
+                'post_content'  => $prompt_text,
+                'post_status'   => 'publish',
+                'post_type'     => 'deepposter_prompt'
+            );
+
+            // Speichere den Prompt als Post
+            $post_id = wp_insert_post($post_data, true);
+
+            if (is_wp_error($post_id)) {
+                throw new Exception('Fehler beim Speichern des Prompts: ' . $post_id->get_error_message());
+            }
+
+            // Setze diesen Prompt als aktiv
+            update_option('deepposter_active_prompt', $post_id);
+
+            wp_send_json_success(array(
+                'message' => 'Prompt erfolgreich gespeichert.',
+                'prompt' => array(
+                    'id' => $post_id,
+                    'title' => get_the_title($post_id),
+                    'content' => $prompt_text
+                )
+            ));
+
+        } catch (Exception $e) {
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - Fehler in save_prompt:');
+                error_log('Message: ' . $e->getMessage());
+                error_log('Stack Trace: ' . $e->getTraceAsString());
+            }
+
+            wp_send_json_error(array(
+                'message' => $e->getMessage()
+            ));
         }
     }
 
     /**
-     * Lädt den gespeicherten Prompt
+     * Lädt den aktiven Prompt
      */
     public function get_prompt() {
         // Überprüfe Nonce
@@ -212,13 +256,107 @@ class DeepPoster_Ajax {
             return;
         }
 
-        // Hole den gespeicherten Prompt
-        $prompt = get_option('deepposter_prompt', '');
-
-        if (!empty($prompt)) {
-            wp_send_json_success($prompt);
-        } else {
-            wp_send_json_error('Kein Prompt gefunden.');
+        // Hole den aktiven Prompt
+        $active_prompt_id = get_option('deepposter_active_prompt', 0);
+        
+        if (!$active_prompt_id) {
+            wp_send_json_error('Kein aktiver Prompt gefunden.');
+            return;
         }
+
+        $prompt = get_post($active_prompt_id);
+        
+        if (!$prompt || $prompt->post_type !== 'deepposter_prompt') {
+            wp_send_json_error('Prompt nicht gefunden.');
+            return;
+        }
+
+        wp_send_json_success(array(
+            'id' => $prompt->ID,
+            'title' => $prompt->post_title,
+            'content' => $prompt->post_content
+        ));
+    }
+
+    /**
+     * Lädt die Liste aller Prompts
+     */
+    public function get_prompts() {
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Starte get_prompts');
+        }
+
+        try {
+            // Überprüfe Nonce
+            if (!check_ajax_referer('deepposter_nonce', 'nonce', false)) {
+                throw new Exception('Ungültiger Sicherheitstoken.');
+            }
+
+            // Überprüfe Berechtigungen
+            if (!current_user_can('edit_posts')) {
+                throw new Exception('Keine Berechtigung.');
+            }
+
+            // Hole alle Prompts
+            $args = array(
+                'post_type' => 'deepposter_prompt',
+                'post_status' => 'publish',
+                'posts_per_page' => -1,
+                'orderby' => 'title',
+                'order' => 'ASC'
+            );
+
+            $prompts = get_posts($args);
+            $active_prompt_id = get_option('deepposter_active_prompt', 0);
+            
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - Gefundene Prompts: ' . count($prompts));
+                error_log('DeepPoster Debug - Aktiver Prompt: ' . $active_prompt_id);
+            }
+
+            $prompt_data = array();
+            foreach ($prompts as $prompt) {
+                $prompt_data[] = array(
+                    'id' => $prompt->ID,
+                    'title' => $prompt->post_title,
+                    'content' => $prompt->post_content
+                );
+            }
+
+            wp_send_json_success(array(
+                'prompts' => $prompt_data,
+                'activePrompt' => intval($active_prompt_id)
+            ));
+
+        } catch (Exception $e) {
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - Fehler in get_prompts:');
+                error_log('Message: ' . $e->getMessage());
+                error_log('Stack Trace: ' . $e->getTraceAsString());
+            }
+
+            wp_send_json_error(array(
+                'message' => $e->getMessage()
+            ));
+        }
+    }
+
+    /**
+     * Hole Prompt-Inhalt
+     */
+    public function get_prompt_content() {
+        check_ajax_referer('deepposter_nonce', 'nonce');
+
+        $prompt_id = intval($_POST['prompt_id']);
+        if (!$prompt_id) {
+            wp_send_json_error('Ungültige Prompt-ID');
+        }
+
+        $prompt = get_post($prompt_id);
+        if (!$prompt) {
+            wp_send_json_error('Prompt nicht gefunden');
+        }
+
+        wp_send_json_success($prompt->post_content);
     }
 } 

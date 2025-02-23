@@ -1,10 +1,58 @@
-.env
+# IDE & System Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node & NPM
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Composer
+vendor/
+composer.lock
+
+# WordPress specific
 wp-config.php
+wp-content/uploads/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/cache/
+wp-content/backups/
+
+# Plugin specific
+plugin/logs/
+plugin/debug.log
+*.log
+cypress/screenshots/
+cypress/videos/
+cypress/results/
+cypress/debug/
+
+# Build & Dist
+dist/
+build/
+*.zip
+*.tar.gz
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Test coverage
+coverage/
+.phpunit.result.cache
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
 docker/.data
 plugin/includes/vendor
-.DS_Store
-
-# Cypress files
-!cypress/screenshots/**/*
-!cypress/logs/*.log
-cypress/logs/
