@@ -8,7 +8,7 @@ class DeepPoster_Post_Types {
      * Konstruktor
      */
     public function __construct() {
-        // Registriere nur über den init Hook
+        // Registriere die Post Types nur im init Hook
         add_action('init', array($this, 'register_post_types'));
     }
 
@@ -16,6 +16,11 @@ class DeepPoster_Post_Types {
      * Registriert die Custom Post Types
      */
     public function register_post_types() {
+        // Debug-Logging
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Registriere Post Types');
+        }
+
         // Prompt Post Type
         $labels = array(
             'name'                  => 'Prompts',
@@ -30,31 +35,31 @@ class DeepPoster_Post_Types {
             'all_items'            => 'Alle Prompts',
             'search_items'         => 'Prompts durchsuchen',
             'not_found'            => 'Keine Prompts gefunden.',
-            'not_found_in_trash'   => 'Keine Prompts im Papierkorb gefunden.',
-            'featured_image'       => 'Prompt Bild',
-            'set_featured_image'   => 'Prompt Bild festlegen',
-            'remove_featured_image' => 'Prompt Bild entfernen',
-            'use_featured_image'   => 'Als Prompt Bild verwenden',
+            'not_found_in_trash'   => 'Keine Prompts im Papierkorb gefunden.'
         );
 
         $args = array(
             'labels'              => $labels,
-            'public'              => true,
+            'public'              => false,
             'show_ui'             => true,
-            'show_in_menu'        => false,  // Nicht automatisch im Menü anzeigen
-            'menu_position'       => 20,
-            'menu_icon'          => 'dashicons-format-chat',
+            'show_in_menu'        => false,
             'capability_type'     => 'post',
             'hierarchical'        => false,
-            'supports'            => array('title', 'editor', 'revisions'),
+            'supports'            => array('title', 'editor'),
             'has_archive'         => false,
-            'rewrite'            => array('slug' => 'prompts'),
-            'show_in_rest'       => true,
-            'show_in_admin_bar'  => true,
-            'show_in_nav_menus'  => true,
+            'rewrite'            => false,
+            'query_var'          => false,
+            'show_in_rest'       => false,
+            'menu_position'      => 5,
+            'menu_icon'          => 'dashicons-format-chat'
         );
 
+        // Registriere den Post Type
         register_post_type('deepposter_prompt', $args);
+
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - Post Type registriert');
+        }
 
         // Prompt-Kategorien
         $tax_labels = array(
@@ -76,9 +81,9 @@ class DeepPoster_Post_Types {
             'labels'            => $tax_labels,
             'show_ui'           => true,
             'show_admin_column' => true,
-            'query_var'         => true,
-            'show_in_rest'      => true,
-            'rewrite'          => array('slug' => 'prompt-categories'),
+            'query_var'         => false,
+            'show_in_rest'      => false,
+            'rewrite'          => false
         );
 
         register_taxonomy('deepposter_prompt_cat', array('deepposter_prompt'), $tax_args);

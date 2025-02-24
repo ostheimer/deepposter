@@ -18,7 +18,7 @@ require_once ABSPATH . 'wp-includes/category.php';
 require_once ABSPATH . 'wp-includes/pluggable.php';
 
 // Plugin Konstanten definieren
-define('DEEPPOSTER_VERSION', '2.0');
+define('DEEPPOSTER_VERSION', '2.0.31');
 define('DEEPPOSTER_DEBUG', true);
 define('DEEPPOSTER_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DEEPPOSTER_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -55,8 +55,17 @@ function deepposter_init() {
     // Dann initialisiere AJAX Handler
     $ajax = new DeepPoster_Ajax();
     
-    // Zuletzt initialisiere Admin
-    $admin = new DeepPoster_Admin();
+    // AJAX Endpoints registrieren
+    add_action('wp_ajax_deepposter_get_prompts', array($ajax, 'get_prompts'));
+    add_action('wp_ajax_deepposter_get_prompt', array($ajax, 'get_prompt'));
+    add_action('wp_ajax_deepposter_save_prompt', array($ajax, 'save_prompt'));
+    add_action('wp_ajax_deepposter_generate', array($ajax, 'generate_articles'));
+    
+    // Initialisiere Admin - NUR EINMAL!
+    static $admin = null;
+    if ($admin === null) {
+        $admin = new DeepPoster_Admin();
+    }
 }
 
 // Plugin aktivieren
@@ -96,14 +105,15 @@ add_action('admin_init', function() {
     ));
 });
 
-// Initialisiere das Plugin
+// Initialisiere das Plugin - NUR EINMAL!
 add_action('init', 'deepposter_init');
 
-// AJAX Handler registrieren
-add_action('wp_ajax_deepposter_generate', array('DeepPoster_Ajax', 'generate_articles'));
-add_action('wp_ajax_deepposter_save_prompt', array('DeepPoster_Ajax', 'save_prompt'));
-add_action('wp_ajax_deepposter_get_prompt', array('DeepPoster_Ajax', 'get_prompt'));
-add_action('wp_ajax_deepposter_get_prompts', array('DeepPoster_Ajax', 'get_prompts'));
+// AJAX Handler registrieren - vermeiden wir doppelte Registrierungen
+// Diese Registrierungen wurden bereits in deepposter_init() vorgenommen
+// add_action('wp_ajax_deepposter_generate', array('DeepPoster_Ajax', 'generate_articles'));
+// add_action('wp_ajax_deepposter_save_prompt', array('DeepPoster_Ajax', 'save_prompt'));
+// add_action('wp_ajax_deepposter_get_prompt', array('DeepPoster_Ajax', 'get_prompt'));
+// add_action('wp_ajax_deepposter_get_prompts', array('DeepPoster_Ajax', 'get_prompts'));
 
 add_action('wp_ajax_deepposter_get_models', function() {
     check_ajax_referer('deepposter_nonce', 'nonce');
@@ -185,14 +195,50 @@ add_action('wp_ajax_deepposter_get_models', function() {
     wp_send_json_success(array_values($formatted_models));
 });
 
-// Plugin initialisieren
-add_action('plugins_loaded', function() {
-    if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-        error_log('DeepPoster Debug - Plugin wird geladen');
+// Admin Assets einbinden
+add_action('admin_enqueue_scripts', 'deepposter_admin_assets');
+function deepposter_admin_assets($hook) {
+    // Nur auf Plugin-Seiten laden
+    if (strpos($hook, 'deepposter') === false) {
+        return;
     }
-    
-    new DeepPoster();
-});
+
+    // CSS einbinden
+    wp_enqueue_style(
+        'deepposter-admin',
+        DEEPPOSTER_PLUGIN_URL . 'assets/css/deepposter-admin.css',
+        array(),
+        DEEPPOSTER_VERSION
+    );
+
+    // JavaScript einbinden
+    wp_enqueue_script(
+        'deepposter-admin',
+        DEEPPOSTER_PLUGIN_URL . 'assets/js/deepposter-admin.js',
+        array('jquery'),
+        DEEPPOSTER_VERSION,
+        true
+    );
+
+    // JavaScript-Variablen lokalisieren
+    wp_localize_script(
+        'deepposter-admin',
+        'deepposterAdmin',
+        array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('deepposter_nonce'),
+            'debug' => DEEPPOSTER_DEBUG
+        )
+    );
+}
+
+// Entferne den zweiten Aufruf von plugin_init() auf plugins_loaded
+// add_action('plugins_loaded', 'deepposter_init');
+
+// Die DeepPoster Hauptklasse nur initialisieren, wenn es noch keine Admin-Instanz gibt
+if (!isset($GLOBALS['deepposter_plugin']) && !isset($GLOBALS['deepposter_admin'])) {
+    $GLOBALS['deepposter_plugin'] = new DeepPoster();
+}
 
 class DeepPoster {
     private $capability = 'manage_options';
@@ -211,92 +257,22 @@ class DeepPoster {
         } catch (Exception $e) {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
                 error_log('DeepPoster Debug - Fehler bei der Initialisierung:');
-                error_log($e->getMessage());
-                error_log($e->getTraceAsString());
             }
-            add_action('admin_notices', function() use ($e) {
-                echo '<div class="notice notice-error"><p>DeepPoster Fehler: ' . esc_html($e->getMessage()) . '</p></div>';
-            });
-            return;
-        }
-
-        // Registriere Hooks
-        add_action('admin_enqueue_scripts', array($this, 'admin_assets'));
-        add_action('wp_ajax_deepposter_get_models', array($this->ajax_handler, 'get_models'));
-        add_action('wp_ajax_deepposter_save_model', array($this->ajax_handler, 'save_model'));
-        add_action('deepposter_daily_maintenance', array($this, 'scheduled_posts_check'));
-
-        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - Actions registriert');
         }
     }
 
+    // Initialisiere alle Komponenten
     private function init_components() {
-        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - Initialisiere Komponenten');
-        }
-
-        // Prüfe API Key
-        $api_key = get_option('deepposter_openai_key');
-        if (empty($api_key)) {
-            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - Kein API Key konfiguriert');
-            }
-            throw new Exception('OpenAI API Key ist nicht konfiguriert. Bitte konfigurieren Sie den API Key in den Einstellungen.');
-        }
-
-        // Initialisiere Generator
-        $this->generator = new DeepPoster_Generator($api_key);
+        // Die Admin-Klasse wird bereits in deepposter_init() initialisiert
+        // Admin nicht erneut initialisieren
         
-        // Initialisiere Settings
-        $this->settings = new Deepposter_Settings();
+        // Speicher-Handler
+        $this->settings = new DeepPoster_Settings();
         
-        // Initialisiere AJAX Handler
-        $this->ajax_handler = new DeepPoster_Ajax($this->generator);
-
-        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - Komponenten initialisiert');
-        }
-    }
-
-    public function admin_assets($hook) {
-        if (strpos($hook, 'deepposter') === false) return;
-
-        // Debug-Ausgabe für Entwicklung
-        if (DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - Hook: ' . $hook);
-            error_log('DeepPoster Debug - OpenAI Key vorhanden: ' . (get_option('deepposter_openai_key') ? 'Ja' : 'Nein'));
-            error_log('DeepPoster Debug - Plugin URL: ' . DEEPPOSTER_PLUGIN_URL);
-        }
-
-        // CSS einbinden
-        wp_enqueue_style(
-            'deepposter-admin',
-            DEEPPOSTER_PLUGIN_URL . 'assets/css/deepposter-admin.css',
-            array(),
-            DEEPPOSTER_VERSION
-        );
-
-        // JavaScript einbinden
-        wp_enqueue_script(
-            'deepposter-admin',
-            DEEPPOSTER_PLUGIN_URL . 'assets/js/deepposter-admin.js',
-            array('jquery'),
-            DEEPPOSTER_VERSION,
-            true
-        );
-
-        // JavaScript-Variablen lokalisieren
-        wp_localize_script('deepposter-admin', 'deepposterAdmin', array(
-            'ajaxurl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('deepposter_nonce'),
-            'openai_key' => !empty(get_option('deepposter_openai_key')),
-            'debug' => DEEPPOSTER_DEBUG,
-            'saved_model' => get_option('deepposter_model', 'gpt-4')
-        ));
-    }
-
-    public function scheduled_posts_check() {
-        // Scheduler-Logik hier implementieren
+        // Generator
+        $this->generator = new DeepPoster_Generator($this->settings);
+        
+        // AJAX-Handler
+        $this->ajax_handler = new DeepPoster_Ajax();
     }
 } 

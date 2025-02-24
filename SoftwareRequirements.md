@@ -87,6 +87,29 @@ Das Plugin soll:
   - Anzeige pro Job/Beitrag aller relevanten Daten (Prompt, Response, Zeitstempel)  
   - Download-/Export-Funktion (z. B. CSV oder Text)  
 
+### 2.7 Admin-Menüstruktur
+
+Das Plugin soll folgende Menüstruktur im WordPress Admin-Bereich aufweisen:
+
+- **DeepPoster** (Hauptmenü)
+  - **Generator** (Standard-Landingpage)
+    - Prompt-Auswahl
+    - Kategorie-Auswahl
+    - Generierungsoptionen
+  - **Prompts verwalten**
+    - Übersicht aller gespeicherten Prompts
+    - Prompt-Editor
+  - **Einstellungen**
+    - API-Konfiguration
+    - Modell-Auswahl
+    - Generierungsoptionen
+  - **System Status**
+    - System-Informationen
+    - API-Status
+    - Debug-Informationen
+
+Die Menüstruktur soll konsistent sein und den WordPress-Designrichtlinien folgen. Jeder Menüpunkt soll eine klare, eindeutige Funktion haben und intuitiv zu finden sein.
+
 ---
 
 ## 3. Nicht-funktionale Anforderungen
@@ -134,11 +157,22 @@ Das Plugin soll:
    - Ordnerstruktur: `/admin/`, `/includes/ai/`, `/includes/deepseek/`, `/languages/`, `/assets/`  
 
 2. **Admin-Oberfläche erstellen**  
-   - Menüeinträge für:  
-     - **Einstellungen** (API Keys, Modelle, Sprachoptionen, Log-Level)  
-     - **KI-Generierung** (Kategorien wählen, Sofortgenerierung, Queue-Jobs)  
-     - **Deepseek** (separates Dashboard/Reiter)  
-     - **Log/Debug** (Auflistung von Protokollen)  
+   - Hauptmenü "DeepPoster" mit Untermenüs:
+     - **Generator** (Hauptseite für Artikelgenerierung)
+       - Prompt-Auswahl und -Verwaltung
+       - Kategoriebasierte Generierung
+       - Sofortgenerierung und Queue-Management
+     - **Prompts verwalten** (Custom Post Type Verwaltung)
+       - CRUD-Operationen für Prompts
+       - Kategorisierung und Tagging
+     - **Einstellungen** 
+       - API-Konfiguration (OpenAI, Deepseek)
+       - Modell-Auswahl und -Verwaltung
+       - Generierungsoptionen und Defaults
+     - **System Status**
+       - System- und API-Status
+       - Debug-Logging und Fehlerprotokollierung
+       - Performance-Metriken
 
 3. **OpenAI-Anbindung**  
    - Einrichtung der API-Kommunikation (z. B. via OpenAI-PHP-SDK oder cURL)  

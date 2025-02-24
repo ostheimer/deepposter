@@ -71,8 +71,12 @@ do_action('admin_enqueue_scripts');
                 );
                 echo esc_textarea($default_prompt);
             ?></textarea>
+            <input type="hidden" id="promptId" name="prompt_id" value="">
             <p class="description"><?php echo esc_html__('Hier können Sie den Prompt anpassen, der an die KI gesendet wird.', 'deepposter'); ?></p>
-            <button type="button" id="savePrompt" class="button button-secondary"><?php echo esc_html__('Prompt speichern', 'deepposter'); ?></button>
+            <div class="button-group">
+                <button type="button" id="savePrompt" class="button button-secondary"><?php echo esc_html__('Prompt speichern', 'deepposter'); ?></button>
+                <button type="button" id="deletePrompt" class="button button-secondary" style="color: #a00; margin-left: 10px; display: none;"><?php echo esc_html__('Prompt löschen', 'deepposter'); ?></button>
+            </div>
         </div>
 
         <div class="form-group">

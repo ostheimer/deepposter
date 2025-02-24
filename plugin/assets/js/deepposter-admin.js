@@ -98,7 +98,13 @@ jQuery(document).ready(function($) {
                     const activePrompt = response.data.prompts.find(p => p.id === response.data.activePrompt);
                     if (activePrompt) {
                         $('#promptText').val(activePrompt.content);
+                        $('#promptId').val(activePrompt.id);
+                        // Zeige den Löschen-Button, wenn ein Prompt ausgewählt ist
+                        $('#deletePrompt').show();
                     }
+                } else {
+                    // Kein aktiver Prompt, verstecke Löschen-Button
+                    $('#deletePrompt').hide();
                 }
                 
                 log('Prompts geladen', response.data.prompts);
@@ -179,12 +185,18 @@ jQuery(document).ready(function($) {
     // Prompt bei Auswahl laden
     $('#promptSelect').on('change', function() {
         const promptId = $(this).val();
+        $('#promptId').val(promptId);
+        
         if (!promptId) {
             $('#promptText').val('');
+            $('#deletePrompt').hide();
             return;
         }
 
         log('Prompt ausgewählt', { id: promptId });
+        
+        // Zeige den Löschen-Button, wenn ein Prompt ausgewählt ist
+        $('#deletePrompt').show();
         
         return $.ajax({
             url: AJAX_URL,
@@ -219,6 +231,68 @@ jQuery(document).ready(function($) {
         const currentPrompt = $('#promptText').val();
         const updatedPrompt = currentPrompt.replace(/\[KATEGORIE\]/g, category);
         $('#promptText').val(updatedPrompt);
+    });
+
+    // Prompt löschen
+    $('#deletePrompt').on('click', function(e) {
+        e.preventDefault();
+        
+        const promptId = $('#promptId').val();
+        if (!promptId) {
+            showError('Kein Prompt zum Löschen ausgewählt');
+            return;
+        }
+        
+        const promptTitle = $('#promptSelect option:selected').text();
+        
+        // Bestätigungsdialog anzeigen
+        if (!confirm('Möchten Sie den Prompt "' + promptTitle + '" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+            return;
+        }
+        
+        log('Lösche Prompt', { id: promptId, title: promptTitle });
+        
+        const $button = $(this);
+        const originalText = $button.text();
+        $button.prop('disabled', true).text('Lösche...');
+        
+        return $.ajax({
+            url: AJAX_URL,
+            type: 'POST',
+            data: {
+                action: 'deepposter_delete_prompt',
+                prompt_id: promptId,
+                nonce: window.deepposterAdmin.nonce
+            }
+        }).then(function(response) {
+            log('Lösch-Antwort erhalten', response);
+            try {
+                if (typeof response === 'string') {
+                    response = JSON.parse(response);
+                }
+
+                if (response.success) {
+                    showSuccess('Prompt erfolgreich gelöscht');
+                    // Setze das Formular zurück und verstecke den Löschen-Button
+                    $('#promptSelect').val('');
+                    $('#promptText').val('');
+                    $('#promptId').val('');
+                    $('#deletePrompt').hide();
+                    // Lade die Prompt-Liste neu
+                    return loadPrompts();
+                } else {
+                    const errorMessage = response.data && response.data.message 
+                        ? response.data.message 
+                        : 'Fehler beim Löschen des Prompts';
+                    showError(errorMessage);
+                }
+            } catch (e) {
+                log('JSON-Parsing-Fehler', e);
+                showError('Fehler beim Verarbeiten der Server-Antwort');
+            }
+        }).always(function() {
+            $button.prop('disabled', false).text(originalText);
+        });
     });
 
     // Artikel generieren

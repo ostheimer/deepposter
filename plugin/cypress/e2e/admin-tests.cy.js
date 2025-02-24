@@ -61,6 +61,22 @@ describe('DeepPoster Admin Tests', () => {
                 });
             }
         }).as('savePromptRequest');
+        
+        // Intercept AJAX calls for deleting prompts
+        cy.intercept('POST', '**/admin-ajax.php', (req) => {
+            if (req.body && req.body.includes('action=deepposter_delete_prompt')) {
+                req.reply({
+                    statusCode: 200,
+                    body: {
+                        success: true,
+                        data: {
+                            message: "Prompt erfolgreich gelöscht",
+                            deleted_id: 1
+                        }
+                    }
+                });
+            }
+        }).as('deletePromptRequest');
     });
 
     describe('Settings Page', () => {
@@ -165,6 +181,37 @@ describe('DeepPoster Admin Tests', () => {
             });
             
             cy.percySnapshot('Dashboard With Prompts', {
+                widths: [1280],
+                percyCSS: successHighlightCSS
+            });
+        });
+        
+        it('deletes prompts successfully', () => {
+            // Warte auf das Formular
+            cy.get('form#deepposterSettingsForm').should('exist');
+            
+            // Füge den Prompt-Text direkt ein
+            cy.get('#promptText').should('exist')
+              .clear()
+              .type('Test Prompt to be deleted')
+              .should('not.be.empty');
+              
+            // Speichere zuerst einen neuen Prompt
+            cy.get('#savePrompt').should('exist').click();
+            
+            // Warte auf Erfolgsmeldung
+            cy.get('.notice-success').should('contain', 'erfolgreich gespeichert');
+              
+            // Bestätigungsdialog simulieren
+            cy.on('window:confirm', () => true);
+            
+            // Delete Button sollte nun sichtbar sein - klicke ihn
+            cy.get('#deletePrompt').should('be.visible').click();
+            
+            // Erfolgsmeldung für das Löschen sollte angezeigt werden
+            cy.get('.notice-success').should('contain', 'gelöscht');
+            
+            cy.percySnapshot('After Prompt Deletion', {
                 widths: [1280],
                 percyCSS: successHighlightCSS
             });

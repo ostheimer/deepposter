@@ -8,97 +8,103 @@
 // https://on.cypress.io/custom-commands
 // ***********************************************
 
+/**
+ * Check if the user is already logged in, and if not, log in
+ */
+Cypress.Commands.add('loginIfNeeded', () => {
+  cy.log('Checking if login is needed...');
+
+  // Prüfe, ob der Admin-Bereich bereits zugänglich ist
+  cy.get('body').then($body => {
+    // Wenn das Login-Formular sichtbar ist, muss eingeloggt werden
+    if ($body.find('#loginform').length > 0) {
+      cy.log('Login form detected, logging in');
+      cy.login();
+    } else {
+      cy.log('Already logged in');
+    }
+  });
+});
+
 // Custom command for WordPress login
 Cypress.Commands.add('login', () => {
-    const username = Cypress.env('wpUsername');
-    const password = Cypress.env('wpPassword');
+    const username = 'deepposter';
+    const password = 'deepposter';
     
-    cy.session([username, password], () => {
-        cy.visit('/wp-login.php');
-        
-        // Debug-Ausgabe der aktuellen URL
-        cy.url().then(url => {
-            cy.log('Login URL:', url);
-        });
-        
-        // Warte auf das Login-Formular
-        cy.get('#loginform').should('be.visible');
-        
-        // Anmeldedaten eingeben
-        cy.get('#user_login').clear().type(username);
-        cy.get('#user_pass').clear().type(password);
-        cy.get('#wp-submit').click();
-        
-        // Warte auf erfolgreiche Weiterleitung
-        cy.url().should('include', '/wp-admin/');
-        
-        // Warte auf Admin-Bar
-        cy.get('body.wp-admin').should('exist');
-        
-        // Debug-Ausgabe der Cookies
-        cy.getCookies().then(cookies => {
-            cy.log('Cookies nach Login:', cookies);
-        });
+    cy.log('Starting login process');
+    
+    // Besuche die Login-Seite direkt
+    cy.visit('/wp-login.php', {
+        timeout: 30000,
+        retryOnNetworkFailure: true
+    });
+    
+    // Debug-Ausgabe der aktuellen URL
+    cy.url().then(url => {
+        cy.log('Current URL:', url);
+    });
+    
+    // Warte auf das Login-Formular und stelle sicher, dass es vollständig geladen ist
+    cy.get('#loginform', { timeout: 15000 }).should('be.visible');
+    
+    // Zusätzliche Wartezeit für die vollständige Seitenladung (reduziert für schnellere Tests)
+    cy.wait(300);
+    
+    cy.log('Login form is ready - starting input');
+    
+    // Anmeldedaten eingeben mit kürzerer Verzögerung für schnellere Tests
+    cy.get('#user_login')
+      .should('be.visible')
+      .focus()
+      .clear()
+      .should('be.empty')
+      .type(username, { delay: 50, force: true });
+    
+    cy.get('#user_pass')
+      .should('be.visible')
+      .focus()
+      .clear()
+      .type(password, { delay: 50, force: true });
+    
+    // Debug-Ausgabe vor dem Klick
+    cy.log('Submitting login form');
+    
+    // Submit-Button klicken
+    cy.get('#wp-submit').should('be.visible').click();
+    
+    // Warte auf Weiterleitung
+    cy.url().should('include', '/wp-admin/', { timeout: 20000 });
+    
+    // Überprüfe Admin-Bereich
+    cy.get('body.wp-admin', { timeout: 20000 }).should('exist').then(() => {
+        cy.log('Successfully logged in');
+    });
+    
+    // Debug-Ausgabe der Cookies
+    cy.getCookies().then(cookies => {
+        cy.log('Current cookies:', cookies);
     });
 });
 
-// Custom command for DeepPoster navigation
-Cypress.Commands.add('visitDeepPoster', (subpage = '') => {
-    cy.login();
-    
-    // Construct the URL based on subpage
-    let url;
-    if (subpage === '-settings') {
-        url = '/wp-admin/admin.php?page=deepposter-settings';
-    } else {
-        url = '/wp-admin/admin.php?page=deepposter';
-    }
-    
-    cy.log('Navigating to:', url);
-    cy.visit(url);
-    
-    // Debug-Ausgabe
-    cy.url().then(currentUrl => {
-        cy.log('Current URL:', currentUrl);
-    });
-    
-    cy.getCookies().then(cookies => {
-        cy.log('Current Cookies:', cookies);
-    });
-    
-    // Wait for page to load
-    cy.get('body.wp-admin').should('exist');
-    
-    // Debug page content
-    cy.get('body').then($body => {
-        cy.log('Body Content:', {
-            html: $body.html(),
-            text: $body.text()
-        });
-        
-        // Log all headings
-        const headings = $body.find('h1, h2, h3, h4, h5, h6');
-        cy.log('Found Headings:', headings.length);
-        headings.each((i, el) => {
-            cy.log(`Heading ${i + 1}:`, {
-                tag: el.tagName,
-                text: el.textContent,
-                classes: el.className
-            });
-        });
-        
-        // Log all forms
-        const forms = $body.find('form');
-        cy.log('Found Forms:', forms.length);
-        forms.each((i, el) => {
-            cy.log(`Form ${i + 1}:`, {
-                id: el.id,
-                action: el.action,
-                method: el.method,
-                classes: el.className
-            });
-        });
-    });
+/**
+ * Visit the DeepPoster admin page
+ * @param {string} suffix - Optional suffix for the page, e.g. '-settings'
+ */
+Cypress.Commands.add('visitDeepPoster', (suffix = '') => {
+  // Zuerst einloggen
+  cy.login();
+  
+  // Dann zur Plugin-Seite navigieren
+  cy.log(`Navigating to DeepPoster${suffix} page`);
+  cy.visit(`/wp-admin/admin.php?page=deepposter${suffix}`, {
+    timeout: 30000,
+    retryOnNetworkFailure: true
+  });
+  
+  // Überprüfen, ob die Seite korrekt geladen wurde
+  cy.url().should('include', `page=deepposter${suffix}`);
+  cy.get('body.wp-admin').should('exist');
+  cy.log(`Successfully navigated to DeepPoster${suffix} page`);
 });
 
 // Erfasse Konsolenausgaben

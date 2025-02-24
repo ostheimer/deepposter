@@ -8,6 +8,8 @@
     "cy:run:log": "echo '=== CYPRESS_LOG_START $(date +%Y%m%d_%H%M%S) ===' && mkdir -p cypress/logs && cypress run | tee cypress/logs/$(date +%Y%m%d_%H%M%S).log && echo '=== CYPRESS_LOG_END ===' && LATEST_LOG=$(ls -t cypress/logs | head -n1) && echo '=== LOG_CONTENT_START ===' && cat cypress/logs/$LATEST_LOG && echo '=== LOG_CONTENT_END ==='"
   },
   "devDependencies": {
+    "@percy/cli": "^1.30.7",
+    "@percy/cypress": "^3.1.4",
     "cypress": "^14.0.1"
   }
 }

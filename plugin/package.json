@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "cypress.config.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cy:run": "cypress run",
+    "percy:run": "node -e \"const env=require('./cypress.env.json'); process.env.PERCY_TOKEN=env.PERCY_TOKEN; require('child_process').execSync('percy exec -- cypress run', {stdio: 'inherit'});\""
   },
   "keywords": [],
   "author": "",

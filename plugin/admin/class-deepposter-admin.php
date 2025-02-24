@@ -40,8 +40,8 @@ class DeepPoster_Admin {
         // Prompts verwalten
         add_submenu_page(
             'deepposter',
-            'Prompts',
-            'Alle Prompts',
+            'Prompts verwalten',
+            'Prompts verwalten',
             'manage_options',
             'edit.php?post_type=deepposter_prompt',
             null

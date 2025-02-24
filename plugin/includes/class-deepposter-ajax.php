@@ -8,12 +8,17 @@ class DeepPoster_Ajax {
      * Konstruktor
      */
     public function __construct() {
-        add_action('wp_ajax_deepposter_save_logs', array($this, 'save_logs'));
-        add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
-        add_action('wp_ajax_deepposter_save_prompt', array($this, 'save_prompt'));
-        add_action('wp_ajax_deepposter_get_prompt', array($this, 'get_prompt'));
+        // Debug-Logging
+        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+            error_log('DeepPoster Debug - AJAX Handler wird initialisiert');
+        }
+
+        // AJAX Actions für eingeloggte Benutzer
         add_action('wp_ajax_deepposter_get_prompts', array($this, 'get_prompts'));
-        add_action('wp_ajax_deepposter_get_prompt_content', array($this, 'get_prompt_content'));
+        add_action('wp_ajax_deepposter_get_prompt', array($this, 'get_prompt'));
+        add_action('wp_ajax_deepposter_save_prompt', array($this, 'save_prompt'));
+        add_action('wp_ajax_deepposter_delete_prompt', array($this, 'delete_prompt'));
+        add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
     }
 
     /**
@@ -169,46 +174,36 @@ class DeepPoster_Ajax {
      * Speichert den benutzerdefinierten Prompt als Custom Post Type
      */
     public function save_prompt() {
-        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - Starte save_prompt');
-            error_log('POST Daten: ' . print_r($_POST, true));
-        }
-
         try {
-            // Überprüfe Nonce
-            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'deepposter_nonce')) {
-                throw new Exception('Sicherheitsüberprüfung fehlgeschlagen.');
+            // Debug-Logging
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - save_prompt aufgerufen');
+                error_log('POST Daten: ' . print_r($_POST, true));
             }
+
+            // Überprüfe Nonce
+            check_ajax_referer('deepposter_nonce', 'nonce');
 
             // Überprüfe Berechtigungen
             if (!current_user_can('edit_posts')) {
-                throw new Exception('Keine ausreichenden Berechtigungen.');
+                throw new Exception('Keine Berechtigung zum Speichern von Prompts.');
             }
 
-            // Hole und validiere den Prompt
+            // Validiere Eingaben
             $prompt_text = isset($_POST['prompt']) ? sanitize_textarea_field($_POST['prompt']) : '';
             if (empty($prompt_text)) {
-                throw new Exception('Kein Prompt angegeben.');
+                throw new Exception('Kein Prompt-Text angegeben.');
             }
 
-            // Validiere Prompt-Länge
-            if (strlen($prompt_text) < 10) {
-                throw new Exception('Der Prompt ist zu kurz (mindestens 10 Zeichen erforderlich).');
-            }
-
-            if (strlen($prompt_text) > 2000) {
-                throw new Exception('Der Prompt ist zu lang (maximal 2000 Zeichen erlaubt).');
-            }
-
-            // Erstelle einen neuen Prompt-Post
+            // Erstelle den Prompt als Post
             $post_data = array(
-                'post_title'    => wp_trim_words($prompt_text, 10, '...'),
-                'post_content'  => $prompt_text,
-                'post_status'   => 'publish',
-                'post_type'     => 'deepposter_prompt'
+                'post_title' => wp_trim_words($prompt_text, 10, '...'),
+                'post_content' => $prompt_text,
+                'post_status' => 'publish',
+                'post_type' => 'deepposter_prompt'
             );
 
-            // Speichere den Prompt als Post
+            // Speichere den Post
             $post_id = wp_insert_post($post_data, true);
 
             if (is_wp_error($post_id)) {
@@ -229,14 +224,10 @@ class DeepPoster_Ajax {
 
         } catch (Exception $e) {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - Fehler in save_prompt:');
-                error_log('Message: ' . $e->getMessage());
-                error_log('Stack Trace: ' . $e->getTraceAsString());
+                error_log('DeepPoster Debug - Fehler in save_prompt: ' . $e->getMessage());
+                error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
             }
-
-            wp_send_json_error(array(
-                'message' => $e->getMessage()
-            ));
+            wp_send_json_error($e->getMessage());
         }
     }
 
@@ -282,41 +273,44 @@ class DeepPoster_Ajax {
      * Lädt die Liste aller Prompts
      */
     public function get_prompts() {
-        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - Starte get_prompts');
-        }
-
         try {
-            // Überprüfe Nonce
-            if (!check_ajax_referer('deepposter_nonce', 'nonce', false)) {
-                throw new Exception('Ungültiger Sicherheitstoken.');
+            // Debug-Logging
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - get_prompts aufgerufen');
             }
+
+            // Überprüfe Nonce
+            check_ajax_referer('deepposter_nonce', 'nonce');
 
             // Überprüfe Berechtigungen
             if (!current_user_can('edit_posts')) {
-                throw new Exception('Keine Berechtigung.');
+                throw new Exception('Keine Berechtigung zum Laden der Prompts.');
             }
 
             // Hole alle Prompts
             $args = array(
                 'post_type' => 'deepposter_prompt',
-                'post_status' => 'publish',
                 'posts_per_page' => -1,
-                'orderby' => 'title',
-                'order' => 'ASC'
+                'orderby' => 'date',
+                'order' => 'DESC'
             );
+
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - WP_Query Args: ' . print_r($args, true));
+            }
 
             $prompts = get_posts($args);
             $active_prompt_id = get_option('deepposter_active_prompt', 0);
-            
+
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
                 error_log('DeepPoster Debug - Gefundene Prompts: ' . count($prompts));
                 error_log('DeepPoster Debug - Aktiver Prompt: ' . $active_prompt_id);
             }
 
-            $prompt_data = array();
+            // Formatiere die Prompts für die Ausgabe
+            $formatted_prompts = array();
             foreach ($prompts as $prompt) {
-                $prompt_data[] = array(
+                $formatted_prompts[] = array(
                     'id' => $prompt->ID,
                     'title' => $prompt->post_title,
                     'content' => $prompt->post_content
@@ -324,20 +318,16 @@ class DeepPoster_Ajax {
             }
 
             wp_send_json_success(array(
-                'prompts' => $prompt_data,
+                'prompts' => $formatted_prompts,
                 'activePrompt' => intval($active_prompt_id)
             ));
 
         } catch (Exception $e) {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - Fehler in get_prompts:');
-                error_log('Message: ' . $e->getMessage());
-                error_log('Stack Trace: ' . $e->getTraceAsString());
+                error_log('DeepPoster Debug - Fehler in get_prompts: ' . $e->getMessage());
+                error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
             }
-
-            wp_send_json_error(array(
-                'message' => $e->getMessage()
-            ));
+            wp_send_json_error($e->getMessage());
         }
     }
 
@@ -358,5 +348,63 @@ class DeepPoster_Ajax {
         }
 
         wp_send_json_success($prompt->post_content);
+    }
+
+    /**
+     * Löscht einen Prompt
+     */
+    public function delete_prompt() {
+        try {
+            // Debug-Logging
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - delete_prompt aufgerufen');
+                error_log('POST Daten: ' . print_r($_POST, true));
+            }
+
+            // Überprüfe Nonce
+            check_ajax_referer('deepposter_nonce', 'nonce');
+
+            // Überprüfe Berechtigungen
+            if (!current_user_can('delete_posts')) {
+                throw new Exception('Keine Berechtigung zum Löschen von Prompts.');
+            }
+
+            // Validiere Eingaben
+            $prompt_id = isset($_POST['prompt_id']) ? intval($_POST['prompt_id']) : 0;
+            if (empty($prompt_id)) {
+                throw new Exception('Keine Prompt-ID angegeben.');
+            }
+
+            // Überprüfe, ob der Prompt existiert und der richtige Typ ist
+            $prompt = get_post($prompt_id);
+            if (!$prompt || $prompt->post_type !== 'deepposter_prompt') {
+                throw new Exception('Prompt nicht gefunden oder ungültiger Typ.');
+            }
+
+            // Prüfe, ob dies der aktive Prompt ist
+            $active_prompt_id = get_option('deepposter_active_prompt', 0);
+            if ($active_prompt_id == $prompt_id) {
+                // Setze den aktiven Prompt zurück
+                update_option('deepposter_active_prompt', 0);
+            }
+
+            // Lösche den Prompt
+            $result = wp_delete_post($prompt_id, true);
+            if (!$result) {
+                throw new Exception('Fehler beim Löschen des Prompts.');
+            }
+
+            wp_send_json_success(array(
+                'message' => 'Prompt erfolgreich gelöscht.',
+                'deleted_id' => $prompt_id
+            ));
+
+        } catch (Exception $e) {
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - Fehler in delete_prompt: ' . $e->getMessage());
+                error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
+            }
+            wp_send_json_error($e->getMessage());
+        }
     }
 } 
