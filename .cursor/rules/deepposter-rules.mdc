@@ -1,0 +1,10 @@
+---
+description: Rule for any UI changes
+globs: 
+alwaysApply: false
+---
+
+# After any UI changes:
+
+- run cypress and percy tests
+- Update the Requirements document if this has not happended beforehand
