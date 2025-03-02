@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepPoster Datenbank-Reparatur</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0073aa;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        button {
+            background: #0073aa;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #005177;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .notice {
+            padding: 10px 15px;
+            margin: 15px 0;
+            border-left: 4px solid #ddd;
+            background: #fff;
+        }
+        .notice-warning {
+            border-color: #ffb900;
+            background-color: #fff8e5;
+        }
+        .notice-success {
+            border-color: #46b450;
+            background-color: #ecf7ed;
+        }
+        .notice-error {
+            border-color: #dc3232;
+            background-color: #fbeaea;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            display: none;
+        }
+        pre {
+            background: #f1f1f1;
+            padding: 10px;
+            overflow: auto;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DeepPoster - Datenbank reparieren</h1>
+        
+        <p>Dieses Tool repariert duplizierte IDs im Custom Post Type "deepposter_prompt", die zu Fehlern führen können.</p>
+        
+        <div class="notice notice-warning">
+            <p><strong>Wichtig:</strong> Bitte erstellen Sie ein Backup Ihrer Datenbank, bevor Sie fortfahren.</p>
+        </div>
+        
+        <button id="repairButton" class="button button-primary">Datenbank reparieren</button>
+        
+        <div id="results" style="display: none;">
+            <h3>Ergebnisse:</h3>
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const repairButton = document.getElementById('repairButton');
+            const results = document.getElementById('results');
+            const output = document.getElementById('output');
+            
+            repairButton.addEventListener('click', function() {
+                // Button deaktivieren und Text ändern
+                repairButton.disabled = true;
+                repairButton.textContent = 'Repariere...';
+                
+                // AJAX-Request erstellen
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/wp-admin/admin-ajax.php', true);
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                
+                xhr.onload = function() {
+                    // Ergebnisse anzeigen
+                    results.style.display = 'block';
+                    
+                    if (xhr.status === 200) {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            
+                            if (response.success) {
+                                output.innerHTML = `<div class="notice notice-success"><p>${response.data.message}</p></div>`;
+                                if (response.data.details) {
+                                    output.innerHTML += `<pre>${response.data.details}</pre>`;
+                                }
+                            } else {
+                                output.innerHTML = `<div class="notice notice-error"><p>Fehler: ${response.data.message}</p></div>`;
+                            }
+                        } catch (e) {
+                            output.innerHTML = `<div class="notice notice-error"><p>Fehler beim Parsen der Antwort: ${e.message}</p></div>`;
+                            output.innerHTML += `<pre>${xhr.responseText}</pre>`;
+                        }
+                    } else {
+                        output.innerHTML = `<div class="notice notice-error"><p>Fehler: ${xhr.status} ${xhr.statusText}</p></div>`;
+                    }
+                    
+                    // Button wieder aktivieren
+                    repairButton.disabled = false;
+                    repairButton.textContent = 'Datenbank reparieren';
+                };
+                
+                xhr.onerror = function() {
+                    results.style.display = 'block';
+                    output.innerHTML = '<div class="notice notice-error"><p>Ein Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.</p></div>';
+                    
+                    // Button wieder aktivieren
+                    repairButton.disabled = false;
+                    repairButton.textContent = 'Datenbank reparieren';
+                };
+                
+                // Daten senden
+                xhr.send('action=deepposter_repair_duplicate_ids');
+            });
+        });
+    </script>
+</body>
+</html> 

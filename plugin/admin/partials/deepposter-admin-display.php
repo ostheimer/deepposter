@@ -60,6 +60,11 @@ do_action('admin_enqueue_scripts');
 
         <div class="form-group">
             <label for="promptText"><?php echo esc_html__('Prompt Vorschau & Anpassung:', 'deepposter'); ?></label>
+            <div class="prompt-title-container" style="margin-top: 10px; margin-bottom: 10px;">
+                <label for="promptTitle"><?php echo esc_html__('Prompt-Titel:', 'deepposter'); ?></label>
+                <input type="text" id="promptTitle" name="promptTitle" style="width: 100%;" placeholder="<?php echo esc_attr__('Geben Sie einen aussagekräftigen Titel für den Prompt ein', 'deepposter'); ?>">
+                <p class="description"><?php echo esc_html__('Der Titel wird im Dropdown-Menü angezeigt und hilft Ihnen, Ihre Prompts leichter zu identifizieren.', 'deepposter'); ?></p>
+            </div>
             <textarea id="promptText" name="prompt" rows="10" style="width: 100%; margin-top: 10px;"><?php
                 $default_prompt = __(
                     'Du bist ein professioneller Content-Ersteller für WordPress-Blogs. ' .

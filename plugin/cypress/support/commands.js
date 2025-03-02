@@ -27,6 +27,17 @@ Cypress.Commands.add('loginIfNeeded', () => {
     });
 });
 
+/**
+ * Custom-Befehl zum Einloggen in WordPress
+ */
+Cypress.Commands.add('loginToWordPress', () => {
+  cy.visit('/wp-login.php');
+  cy.get('#user_login').type('admin');
+  cy.get('#user_pass').type('password');
+  cy.get('#wp-submit').click();
+  cy.url().should('include', '/wp-admin/');
+});
+
 // Custom command for WordPress login with improved performance
 Cypress.Commands.add('login', () => {
     const username = 'deepposter';

@@ -243,7 +243,7 @@ class DeepPoster_Ajax {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
                 error_log('DeepPoster Debug - Fehler in save_prompt: ' . $e->getMessage());
                 error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
-        } else {
+            } else {
                 // Für Debugging immer ausgeben
                 error_log('DeepPoster Debug - Fehler in save_prompt: ' . $e->getMessage());
             }

@@ -1,7 +1,57 @@
+/**
+ * DeepPoster Admin JavaScript
+ * 
+ * Hauptdatei für die Administratorfunktionen des DeepPoster-Plugins.
+ */
+
 jQuery(document).ready(function($) {
     'use strict';
 
     const DEBUG = true;
+
+    // Stellt sicher, dass das deepposterAdmin-Objekt existiert und fügt fehlende Eigenschaften hinzu
+    if (typeof deepposterAdmin === 'undefined') {
+        deepposterAdmin = {};
+    }
+
+    // Stelle sicher, dass die ajaxurl-Eigenschaft definiert ist
+    if (typeof deepposterAdmin.ajaxurl === 'undefined') {
+        deepposterAdmin.ajaxurl = typeof ajaxurl !== 'undefined' ? ajaxurl : '/wp-admin/admin-ajax.php';
+    }
+
+    // Stelle sicher, dass die nonce-Eigenschaft definiert ist
+    if (typeof deepposterAdmin.nonce === 'undefined') {
+        deepposterAdmin.nonce = jQuery('#deepposter_nonce').val() || '';
+    }
+
+    // Stelle sicher, dass die i18n-Eigenschaft definiert ist
+    if (typeof deepposterAdmin.i18n === 'undefined') {
+        deepposterAdmin.i18n = {
+            // Standard-Nachrichten
+            saving: 'Speichern...',
+            saved: 'Gespeichert',
+            error: 'Fehler',
+            confirm: 'Bestätigen',
+            cancel: 'Abbrechen',
+            errorGenerating: 'Fehler beim Generieren des Artikels',
+            generating: 'Generiere Artikel...',
+            deleted: 'Gelöscht',
+            confirm_delete: 'Möchten Sie diesen Prompt wirklich löschen?',
+            selectPrompt: 'Prompt auswählen',
+            promptsLoaded: 'Prompts geladen',
+            noPrompts: 'Keine gespeicherten Prompts vorhanden.',
+            errorLoadingPrompts: 'Fehler beim Laden der Prompts',
+            unknownError: 'Unbekannter Fehler',
+            promptLoaded: 'Prompt geladen',
+            promptNotFound: 'Der ausgewählte Prompt konnte nicht gefunden werden.',
+            errorLoadingPrompt: 'Fehler beim Laden des Prompts',
+            untitledPrompt: 'Unbenanntes Prompt',
+            promptSaved: 'Prompt erfolgreich gespeichert',
+            errorSavingPrompt: 'Fehler beim Speichern des Prompts',
+            emptyPromptText: 'Bitte geben Sie einen Prompt-Text ein.',
+            emptyPromptTitle: 'Bitte geben Sie einen Titel für den Prompt ein.'
+        };
+    }
 
     function log(message, data = null) {
         if (DEBUG) {
@@ -135,32 +185,16 @@ jQuery(document).ready(function($) {
     // Lade gespeicherte Prompts beim Start
     loadSavedPrompts();
 
-    // Event-Handler für Prompt-Auswahl
+    // Event-Handler für Prompt-Auswahl (Dropdown)
     $('#promptSelect').on('change', function() {
-        const promptId = $(this).val();
-        if (promptId) {
-            loadPromptContent(promptId);
-        }
-    });
-
-    // Event-Handler für Prompt speichern
-    $('#savePrompt').on('click', function() {
-        const promptText = $('#promptText').val();
-        if (!promptText) {
-            showNotice('Bitte geben Sie einen Prompt-Text ein.', 'error');
+        var selectedPromptId = $(this).val();
+        
+        // Wenn kein Prompt ausgewählt ist, nichts tun
+        if (!selectedPromptId) {
             return;
         }
-        savePrompt(promptText);
-    });
 
-    // Event-Handler für Formular-Übermittlung
-    $('#deepposterSettingsForm').on('submit', function(e) {
-        e.preventDefault();
-        generateArticles();
-    });
-
-    // Lade gespeicherte Prompts
-    function loadSavedPrompts() {
+        // Hole den ausgewählten Prompt aus dem Datenpool
         $.ajax({
             url: deepposterAdmin.ajaxurl,
             type: 'POST',
@@ -169,72 +203,205 @@ jQuery(document).ready(function($) {
                 nonce: deepposterAdmin.nonce
             },
             success: function(response) {
-                if (response.success) {
-                    const $select = $('#promptSelect');
-                    $select.find('option:not(:first)').remove();
-                    
-                    response.data.forEach(function(prompt) {
-                        $select.append($('<option>', {
-                            value: prompt.ID,
-                            text: prompt.post_title || 'Prompt #' + prompt.ID
-                        }));
-                    });
+                if (response.success && response.data.prompts) {
+                    // Prüfe, ob der ausgewählte Prompt existiert
+                    if (response.data.prompts[selectedPromptId]) {
+                        var promptData = response.data.prompts[selectedPromptId];
+                        
+                        // Fülle die Formularfelder mit den Prompt-Daten
+                        $('#promptTitle').val(promptData.title || '');
+                        $('#promptText').val(promptData.text || '');
+                        
+                        // Zeige eine Erfolgsbenachrichtigung an
+                        showNotice('Prompt geladen: ' + promptData.title, 'success');
+                    } else {
+                        showNotice('Der ausgewählte Prompt konnte nicht gefunden werden.', 'error');
+                    }
                 } else {
-                    showNotice('Fehler beim Laden der Prompts: ' + response.data, 'error');
+                    showNotice('Fehler beim Laden des Prompts: ' + (response.data?.message || 'Unbekannter Fehler'), 'error');
                 }
             },
             error: function(xhr, status, error) {
-                showNotice('Fehler beim Laden der Prompts: ' + error, 'error');
+                showNotice('Fehler beim Laden des Prompts: ' + error, 'error');
             }
         });
-    }
+    });
 
-    // Lade Prompt-Inhalt
-    function loadPromptContent(promptId) {
-        $.ajax({
-            url: deepposterAdmin.ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'deepposter_get_prompt_content',
-                prompt_id: promptId,
-                nonce: deepposterAdmin.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    $('#promptText').val(response.data);
-                } else {
-                    showNotice('Fehler beim Laden des Prompt-Inhalts: ' + response.data, 'error');
-                }
-            },
-            error: function(xhr, status, error) {
-                showNotice('Fehler beim Laden des Prompt-Inhalts: ' + error, 'error');
-            }
-        });
-    }
+    /**
+     * Event-Listener für das Speichern eines Prompts
+     */
+    jQuery(document).on('click', '#savePrompt', function() {
+        var promptText = jQuery('#promptText').val();
+        var promptTitle = jQuery('#promptTitle').val();
+        
+        // Validierung
+        if (!promptText) {
+            showNotice(deepposterAdmin.i18n.emptyPromptText, 'error');
+            return;
+        }
 
-    // Speichere Prompt
-    function savePrompt(promptText) {
-        $.ajax({
+        if (!promptTitle) {
+            showNotice(deepposterAdmin.i18n.emptyPromptTitle, 'error');
+            return;
+        }
+
+        jQuery.ajax({
             url: deepposterAdmin.ajaxurl,
             type: 'POST',
             data: {
                 action: 'deepposter_save_prompt',
-                prompt: promptText,
+                prompt_text: promptText,
+                prompt_title: promptTitle,
                 nonce: deepposterAdmin.nonce
             },
             success: function(response) {
                 if (response.success) {
-                    showNotice('Prompt erfolgreich gespeichert!', 'success');
-                    loadSavedPrompts(); // Aktualisiere die Liste
+                    showNotice(deepposterAdmin.i18n.promptSaved, 'success');
+                    loadSavedPrompts(); // Aktualisiere die Dropdown-Liste
                 } else {
-                    showNotice('Fehler beim Speichern des Prompts: ' + response.data, 'error');
+                    showNotice(deepposterAdmin.i18n.errorSavingPrompt + ': ' + 
+                        (response.data && response.data.message ? response.data.message : deepposterAdmin.i18n.unknownError), 'error');
                 }
             },
             error: function(xhr, status, error) {
-                showNotice('Fehler beim Speichern des Prompts: ' + error, 'error');
+                console.error('AJAX-Fehler:', error);
+                showNotice(deepposterAdmin.i18n.errorSavingPrompt + ': ' + error, 'error');
+            }
+        });
+    });
+
+    // Event-Handler für Formular-Übermittlung
+    $('#deepposterSettingsForm').on('submit', function(e) {
+        e.preventDefault();
+        generateArticles();
+    });
+
+    /**
+     * Lädt gespeicherte Prompts und füllt das Dropdown-Menü
+     */
+    function loadSavedPrompts() {
+        console.log('loadSavedPrompts() wird aufgerufen...');
+        console.log('AJAX URL:', deepposterAdmin.ajaxurl);
+        console.log('Nonce vorhanden:', !!deepposterAdmin.nonce);
+        
+        // AJAX-Request zum Laden der gespeicherten Prompts
+        console.log('Sende AJAX-Anfrage zum Laden der Prompts...');
+        jQuery.ajax({
+            url: deepposterAdmin.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'deepposter_get_prompts',
+                nonce: deepposterAdmin.nonce
+            },
+            success: function(response) {
+                console.log('AJAX-Antwort erhalten:', response);
+                
+                var $promptSelect = jQuery('#promptSelect');
+                $promptSelect.empty();
+                $promptSelect.append('<option value="">' + deepposterAdmin.i18n.selectPrompt + '</option>');
+                
+                // Überprüfen, ob Prompts vorhanden sind
+                if (response.success && response.data.prompts) {
+                    console.log('Anzahl geladener Prompts:', Object.keys(response.data.prompts).length);
+                    console.log('Geladene Prompts:', response.data.prompts);
+                    
+                    // Füge alle geladenen Prompts zum Dropdown hinzu
+                    var promptsAvailable = false;
+                    var count = 0;
+                    
+                    for (var promptId in response.data.prompts) {
+                        if (response.data.prompts.hasOwnProperty(promptId)) {
+                            var prompt = response.data.prompts[promptId];
+                            count++;
+                            
+                            // Zusätzliches Debugging für jeden Prompt
+                            console.log('Verarbeite Prompt #' + count + ': ID=' + promptId);
+                            console.log('Prompt-Titel:', prompt.title);
+                            console.log('Prompt-Text (Länge):', prompt.text ? prompt.text.length : 0);
+                            
+                            if (prompt.title) {
+                                console.log('Füge Prompt hinzu: ID=' + promptId + ', Titel=' + prompt.title);
+                                $promptSelect.append('<option value="' + promptId + '">' + prompt.title + '</option>');
+                                promptsAvailable = true;
+                            } else {
+                                console.log('Überspringe Prompt ohne Titel: ID=' + promptId);
+                            }
+                        }
+                    }
+                    
+                    console.log('Insgesamt ' + count + ' Prompts verarbeitet, ' + $promptSelect.find('option').length + ' im Dropdown');
+                    
+                    // Aktiviere/Deaktiviere Dropdown je nach Verfügbarkeit von Prompts
+                    if (promptsAvailable) {
+                        console.log('Prompts gefunden, aktiviere Dropdown');
+                        $promptSelect.prop('disabled', false);
+                        showNotice(deepposterAdmin.i18n.promptsLoaded, 'success');
+                    } else {
+                        console.log('Keine Prompts gefunden, deaktiviere Dropdown');
+                        $promptSelect.prop('disabled', true);
+                        showNotice(deepposterAdmin.i18n.noPrompts, 'info');
+                    }
+                } else {
+                    console.log('Fehler in der AJAX-Antwort oder keine Prompts vorhanden:', response);
+                    $promptSelect.prop('disabled', true);
+                    showNotice(deepposterAdmin.i18n.errorLoadingPrompts + ': ' + 
+                        (response.data && response.data.message ? response.data.message : deepposterAdmin.i18n.unknownError), 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX-Fehler beim Laden der Prompts:', status, error);
+                console.error('AJAX-Antwort:', xhr.responseText);
+                
+                // Deaktiviere Dropdown und zeige Fehlermeldung
+                jQuery('#promptSelect').prop('disabled', true);
+                showNotice(deepposterAdmin.i18n.errorLoadingPrompts + ': ' + error, 'error');
             }
         });
     }
+
+    /**
+     * Event-Handler für die Auswahl eines Prompts aus dem Dropdown
+     */
+    jQuery(document).on('change', '#promptSelect', function() {
+        var selectedPromptId = jQuery(this).val();
+        
+        // Wenn ein Prompt ausgewählt wurde
+        if (selectedPromptId) {
+            jQuery.ajax({
+                url: deepposterAdmin.ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'deepposter_get_prompts',
+                    nonce: deepposterAdmin.nonce
+                },
+                success: function(response) {
+                    if (response.success && response.data && response.data.prompts) {
+                        var prompt = response.data.prompts[selectedPromptId];
+                        
+                        if (prompt) {
+                            // Setze den Prompt-Titel und -Text in die Felder
+                            jQuery('#promptTitle').val(prompt.title || '');
+                            jQuery('#promptText').val(prompt.text || '');
+                            showNotice(deepposterAdmin.i18n.promptLoaded, 'success');
+                        } else {
+                            showNotice(deepposterAdmin.i18n.promptNotFound, 'error');
+                        }
+                    } else {
+                        showNotice(deepposterAdmin.i18n.errorLoadingPrompt + ': ' + 
+                            (response.data && response.data.message ? response.data.message : deepposterAdmin.i18n.unknownError), 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX-Fehler:', error);
+                    showNotice(deepposterAdmin.i18n.errorLoadingPrompt + ': ' + error, 'error');
+                }
+            });
+        } else {
+            // Prompt-Felder leeren, wenn kein Prompt ausgewählt ist
+            jQuery('#promptTitle').val('');
+            jQuery('#promptText').val('');
+        }
+    });
 
     // Generiere Artikel
     function generateArticles() {
@@ -285,23 +452,111 @@ jQuery(document).ready(function($) {
         $results.html(html);
     }
 
-    // Zeige Benachrichtigung
-    function showNotice(message, type) {
-        const $notice = $('<div>', {
-            class: `notice notice-${type} is-dismissible`,
-            html: `<p>${message}</p>`
-        });
-
-        $('#generationResults').html($notice);
-
-        // Automatisches Ausblenden nach 5 Sekunden
-        if (type === 'success') {
-            setTimeout(function() {
-                $notice.fadeOut(function() {
-                    $(this).remove();
-                });
-            }, 5000);
+    /**
+     * Zeigt eine Benachrichtigung an
+     * @param {string} message - Die anzuzeigende Nachricht 
+     * @param {string} type - Der Typ der Benachrichtigung (success, error, info, warning)
+     * @param {number} duration - Die Dauer in Millisekunden, für die die Benachrichtigung angezeigt werden soll (0 = dauerhaft)
+     */
+    function showNotice(message, type = 'info', duration = 5000) {
+        // Entferne alte Benachrichtigungen mit derselben Art
+        jQuery('.deepposter-notice.' + type).remove();
+        
+        // Erstelle die Benachrichtigung
+        var $notice = jQuery('<div class="deepposter-notice ' + type + '">' + 
+                         '<span class="deepposter-notice-message">' + message + '</span>' +
+                         '<button type="button" class="deepposter-notice-dismiss">×</button>' +
+                       '</div>');
+        
+        // Füge die Benachrichtigung zum Container hinzu oder erstelle einen
+        var $container = jQuery('#deepposter-notices');
+        if ($container.length === 0) {
+            $container = jQuery('<div id="deepposter-notices"></div>');
+            jQuery('body').append($container);
+            
+            // Füge CSS für Benachrichtigungen hinzu, falls noch nicht vorhanden
+            if (jQuery('#deepposter-notices-css').length === 0) {
+                jQuery('head').append(`
+                    <style id="deepposter-notices-css">
+                        #deepposter-notices {
+                            position: fixed;
+                            top: 32px;
+                            right: 15px;
+                            z-index: 9999;
+                            width: 300px;
+                        }
+                        .deepposter-notice {
+                            margin: 5px 0;
+                            padding: 10px 15px;
+                            border-radius: 3px;
+                            position: relative;
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            animation: deepposter-fade-in 0.5s;
+                        }
+                        .deepposter-notice.success {
+                            background-color: #dff0d8;
+                            color: #3c763d;
+                            border: 1px solid #d6e9c6;
+                        }
+                        .deepposter-notice.error {
+                            background-color: #f2dede;
+                            color: #a94442;
+                            border: 1px solid #ebccd1;
+                        }
+                        .deepposter-notice.info {
+                            background-color: #d9edf7;
+                            color: #31708f;
+                            border: 1px solid #bce8f1;
+                        }
+                        .deepposter-notice.warning {
+                            background-color: #fcf8e3;
+                            color: #8a6d3b;
+                            border: 1px solid #faebcc;
+                        }
+                        .deepposter-notice-message {
+                            flex: 1;
+                        }
+                        .deepposter-notice-dismiss {
+                            background: none;
+                            border: none;
+                            color: inherit;
+                            font-size: 18px;
+                            cursor: pointer;
+                            opacity: 0.5;
+                            transition: opacity 0.2s;
+                        }
+                        .deepposter-notice-dismiss:hover {
+                            opacity: 1;
+                        }
+                        @keyframes deepposter-fade-in {
+                            from { opacity: 0; transform: translateY(-10px); }
+                            to { opacity: 1; transform: translateY(0); }
+                        }
+                    </style>
+                `);
+            }
         }
+        $container.append($notice);
+        
+        // Event-Handler für den Schließen-Button
+        $notice.find('.deepposter-notice-dismiss').on('click', function() {
+            $notice.fadeOut(300, function() {
+                $notice.remove();
+            });
+        });
+        
+        // Automatisches Ausblenden nach der angegebenen Dauer
+        if (duration > 0) {
+            setTimeout(function() {
+                $notice.fadeOut(300, function() {
+                    $notice.remove();
+                });
+            }, duration);
+        }
+        
+        return $notice;
     }
 
     // Debug-Logging wenn aktiviert
@@ -310,4 +565,8 @@ jQuery(document).ready(function($) {
             console.log('DeepPoster Debug:', message);
         }
     }
+
+    // Initialer Aufruf zum Laden der Prompts beim Seitenstart
+    console.log('Initialer Aufruf von loadSavedPrompts()');
+    loadSavedPrompts();
 }); 

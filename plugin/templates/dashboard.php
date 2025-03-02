@@ -24,6 +24,12 @@ defined('ABSPATH') || exit;
         <div class="deepposter-main">
             <form id="aiGeneratorForm" class="deepposter-form" method="post" action="javascript:void(0);">
                 <div class="deepposter-settings-field">
+                    <label for="promptTitle">Prompt-Titel:</label>
+                    <input type="text" id="promptTitle" name="promptTitle" style="width: 100%;" placeholder="Geben Sie einen aussagekräftigen Titel für den Prompt ein">
+                    <p class="description">Der Titel wird im Dropdown-Menü angezeigt und hilft Ihnen, Ihre Prompts leichter zu identifizieren.</p>
+                </div>
+
+                <div class="deepposter-settings-field">
                     <label for="promptText">Prompt Vorschau & Anpassung:</label>
                     <textarea id="promptText" name="prompt" rows="10" style="width: 100%; margin-top: 10px;"><?php
                         echo esc_textarea(

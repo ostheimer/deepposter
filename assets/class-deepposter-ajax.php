@@ -19,7 +19,6 @@ class DeepPoster_Ajax {
         add_action('wp_ajax_deepposter_save_prompt', array($this, 'save_prompt'));
         add_action('wp_ajax_deepposter_delete_prompt', array($this, 'delete_prompt'));
         add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
-        add_action('wp_ajax_deepposter_repair_duplicate_ids', array($this, 'repair_duplicate_ids'));
     }
 
     /**
@@ -243,7 +242,7 @@ class DeepPoster_Ajax {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
                 error_log('DeepPoster Debug - Fehler in save_prompt: ' . $e->getMessage());
                 error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
-        } else {
+            } else {
                 // Für Debugging immer ausgeben
                 error_log('DeepPoster Debug - Fehler in save_prompt: ' . $e->getMessage());
             }
@@ -313,56 +312,36 @@ class DeepPoster_Ajax {
             
             // Hole gespeicherte Prompts zuerst aus der WordPress-Option
             $saved_prompts = get_option('deepposter_saved_prompts', array());
-            error_log('DeepPoster Debug - Gespeicherte Prompts aus Option: ' . print_r($saved_prompts, true));
             
             // Hole auch die Custom Post Type Prompts
+            $args = array(
+                'post_type' => 'deepposter_prompt',
+                'posts_per_page' => -1,  // Alle Posts holen
+                'post_status' => 'publish'
+            );
+            
+            $prompt_query = new WP_Query($args);
             $custom_prompts = array();
             
-            try {
-                // Versuche zuerst, die Prompts über WP_Query zu laden
-                $args = array(
-                    'post_type' => 'deepposter_prompt',
-                    'posts_per_page' => -1,  // Alle Posts holen
-                    'post_status' => 'publish'
-                );
-                
-                $prompt_query = new WP_Query($args);
-                error_log('DeepPoster Debug - WP_Query ausgeführt: ' . print_r($prompt_query->request, true));
-                error_log('DeepPoster Debug - Gefundene Posts: ' . $prompt_query->post_count);
-                
-                // Konvertiere Custom Post Type Prompts in das gleiche Format
-                if ($prompt_query->have_posts()) {
-                    while ($prompt_query->have_posts()) {
-                        $prompt_query->the_post();
-                        $post_id = get_the_ID();
-                        $prompt_id = 'cpt_prompt_' . $post_id;
-                        
-                        $title = get_the_title();
-                        $content = get_the_content();
-                        
-                        error_log('DeepPoster Debug - Verarbeite Post: ID=' . $post_id . ', Titel=' . $title);
-                        
-                        $custom_prompts[$prompt_id] = array(
-                            'title' => $title,
-                            'text' => $content,
-                            'date_created' => get_the_date('Y-m-d H:i:s'),
-                            'post_id' => $post_id
-                        );
-                    }
-                    // Zurücksetzen des Post-Daten
-                    wp_reset_postdata();
-                } else {
-                    // Wenn keine Posts gefunden wurden, versuche direkt aus der Datenbank zu laden
-                    error_log('DeepPoster Debug - Keine Posts über WP_Query gefunden, versuche direkte DB-Abfrage');
-                    $custom_prompts = $this->load_prompts_from_database();
+            // Debug-Ausgabe der geladenen Prompts
+            error_log('DeepPoster Debug - Prompt-Query: ' . print_r($prompt_query, true));
+            
+            // Konvertiere Custom Post Type Prompts in das gleiche Format
+            if ($prompt_query->have_posts()) {
+                while ($prompt_query->have_posts()) {
+                    $prompt_query->the_post();
+                    $post_id = get_the_ID();
+                    $prompt_id = 'cpt_prompt_' . $post_id;
+                    
+                    $custom_prompts[$prompt_id] = array(
+                        'title' => get_the_title(),
+                        'text' => get_the_content(),
+                        'date_created' => get_the_date('Y-m-d H:i:s'),
+                        'post_id' => $post_id
+                    );
                 }
-            } catch (Exception $e) {
-                error_log('DeepPoster Debug - Fehler beim Laden der Custom Post Types: ' . $e->getMessage());
-                error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
-                
-                // Fallback: Versuche direkt aus der Datenbank zu laden
-                error_log('DeepPoster Debug - Versuche Fallback: Direkte DB-Abfrage');
-                $custom_prompts = $this->load_prompts_from_database();
+                // Zurücksetzen des Post-Daten
+                wp_reset_postdata();
             }
             
             error_log('DeepPoster Debug - Custom Post Type Prompts: ' . print_r($custom_prompts, true));
@@ -400,59 +379,11 @@ class DeepPoster_Ajax {
             
         } catch (Exception $e) {
             error_log('DeepPoster Debug - Fehler in get_prompts: ' . $e->getMessage());
-            error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
             
             // Sende Fehlerantwort
             wp_send_json_error(array(
                 'message' => __('Fehler beim Laden der Prompts: ', 'deepposter') . $e->getMessage()
             ));
-        }
-    }
-    
-    /**
-     * Lädt Prompts direkt aus der Datenbank
-     * 
-     * @return array Array mit Prompts
-     */
-    private function load_prompts_from_database() {
-        global $wpdb;
-        $prompts = array();
-        
-        try {
-            error_log('DeepPoster Debug - Lade Prompts direkt aus der Datenbank');
-            
-            // Hole alle Posts vom Typ deepposter_prompt
-            $query = $wpdb->prepare(
-                "SELECT ID, post_title, post_content, post_date 
-                 FROM {$wpdb->posts} 
-                 WHERE post_type = %s 
-                 AND post_status = 'publish'",
-                'deepposter_prompt'
-            );
-            
-            $results = $wpdb->get_results($query);
-            error_log('DeepPoster Debug - DB-Abfrage ausgeführt: ' . $query);
-            error_log('DeepPoster Debug - Gefundene Datensätze: ' . count($results));
-            
-            if ($results) {
-                foreach ($results as $post) {
-                    $prompt_id = 'db_prompt_' . $post->ID;
-                    
-                    error_log('DeepPoster Debug - Verarbeite DB-Post: ID=' . $post->ID . ', Titel=' . $post->post_title);
-                    
-                    $prompts[$prompt_id] = array(
-                        'title' => $post->post_title,
-                        'text' => $post->post_content,
-                        'date_created' => $post->post_date,
-                        'post_id' => $post->ID
-                    );
-                }
-            }
-            
-            return $prompts;
-        } catch (Exception $e) {
-            error_log('DeepPoster Debug - Fehler beim direkten Laden aus der Datenbank: ' . $e->getMessage());
-            return array();
         }
     }
 
@@ -531,136 +462,5 @@ class DeepPoster_Ajax {
             }
             wp_send_json_error($e->getMessage());
         }
-    }
-
-    /**
-     * Repariert duplizierte IDs in der Datenbank
-     * 
-     * @since 1.0.0
-     */
-    public function repair_duplicate_ids() {
-        global $wpdb;
-        
-        // Debug-Logging
-        error_log('DeepPoster: Starte Reparatur duplizierter IDs');
-        
-        // Finde duplizierte post_name Einträge
-        $query = "
-            SELECT post_name, COUNT(*) as count
-            FROM {$wpdb->posts}
-            WHERE post_type = 'deepposter_prompt'
-            GROUP BY post_name
-            HAVING count > 1
-        ";
-        
-        $duplicates = $wpdb->get_results($query);
-        $fixed_count = 0;
-        
-        if (!empty($duplicates)) {
-            error_log('DeepPoster: ' . count($duplicates) . ' duplizierte post_name Einträge gefunden');
-            
-            foreach ($duplicates as $duplicate) {
-                // Hole alle Posts mit diesem post_name
-                $posts = $wpdb->get_results(
-                    $wpdb->prepare(
-                        "SELECT ID, post_name FROM {$wpdb->posts} 
-                        WHERE post_type = 'deepposter_prompt' AND post_name = %s
-                        ORDER BY ID ASC",
-                        $duplicate->post_name
-                    )
-                );
-                
-                // Überspringe den ersten Eintrag (behalte ihn)
-                array_shift($posts);
-                
-                // Aktualisiere die restlichen Einträge mit eindeutigen Namen
-                foreach ($posts as $index => $post) {
-                    $new_post_name = $duplicate->post_name . '-' . ($index + 1);
-                    
-                    $wpdb->update(
-                        $wpdb->posts,
-                        array('post_name' => $new_post_name),
-                        array('ID' => $post->ID),
-                        array('%s'),
-                        array('%d')
-                    );
-                    
-                    error_log("DeepPoster: Post ID {$post->ID} umbenannt von {$duplicate->post_name} zu {$new_post_name}");
-                    $fixed_count++;
-                }
-            }
-        } else {
-            error_log('DeepPoster: Keine duplizierten post_name Einträge gefunden');
-        }
-        
-        // Finde duplizierte Metadaten
-        $meta_query = "
-            SELECT post_id, meta_key, COUNT(*) as count
-            FROM {$wpdb->postmeta}
-            WHERE post_id IN (
-                SELECT ID FROM {$wpdb->posts} WHERE post_type = 'deepposter_prompt'
-            )
-            GROUP BY post_id, meta_key
-            HAVING count > 1
-        ";
-        
-        $meta_duplicates = $wpdb->get_results($meta_query);
-        $meta_fixed_count = 0;
-        
-        if (!empty($meta_duplicates)) {
-            error_log('DeepPoster: ' . count($meta_duplicates) . ' duplizierte Metadaten gefunden');
-            
-            foreach ($meta_duplicates as $duplicate) {
-                // Hole alle Metadaten für diesen Post und Schlüssel
-                $metas = $wpdb->get_results(
-                    $wpdb->prepare(
-                        "SELECT meta_id FROM {$wpdb->postmeta} 
-                        WHERE post_id = %d AND meta_key = %s
-                        ORDER BY meta_id ASC",
-                        $duplicate->post_id,
-                        $duplicate->meta_key
-                    )
-                );
-                
-                // Überspringe den ersten Eintrag (behalte ihn)
-                array_shift($metas);
-                
-                // Lösche die restlichen Einträge
-                foreach ($metas as $meta) {
-                    $wpdb->delete(
-                        $wpdb->postmeta,
-                        array('meta_id' => $meta->meta_id),
-                        array('%d')
-                    );
-                    
-                    error_log("DeepPoster: Meta ID {$meta->meta_id} für Post ID {$duplicate->post_id} gelöscht");
-                    $meta_fixed_count++;
-                }
-            }
-        } else {
-            error_log('DeepPoster: Keine duplizierten Metadaten gefunden');
-        }
-        
-        // Cache leeren
-        wp_cache_flush();
-        
-        // Ergebnis zurückgeben
-        $result = array(
-            'success' => true,
-            'data' => array(
-                'message' => sprintf(
-                    'Reparatur abgeschlossen. %d duplizierte Posts und %d duplizierte Metadaten repariert.',
-                    $fixed_count,
-                    $meta_fixed_count
-                ),
-                'fixed_posts' => $fixed_count,
-                'fixed_metas' => $meta_fixed_count
-            )
-        );
-        
-        error_log('DeepPoster: Reparatur abgeschlossen. ' . $fixed_count . ' Posts und ' . $meta_fixed_count . ' Metadaten repariert.');
-        
-        // Sende JSON-Antwort
-        wp_send_json($result);
     }
 } 

@@ -19,7 +19,6 @@ class DeepPoster_Ajax {
         add_action('wp_ajax_deepposter_save_prompt', array($this, 'save_prompt'));
         add_action('wp_ajax_deepposter_delete_prompt', array($this, 'delete_prompt'));
         add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
-        add_action('wp_ajax_deepposter_repair_duplicate_ids', array($this, 'repair_duplicate_ids'));
     }
 
     /**
@@ -243,7 +242,7 @@ class DeepPoster_Ajax {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
                 error_log('DeepPoster Debug - Fehler in save_prompt: ' . $e->getMessage());
                 error_log('DeepPoster Debug - Stack Trace: ' . $e->getTraceAsString());
-        } else {
+            } else {
                 // Für Debugging immer ausgeben
                 error_log('DeepPoster Debug - Fehler in save_prompt: ' . $e->getMessage());
             }
@@ -531,136 +530,5 @@ class DeepPoster_Ajax {
             }
             wp_send_json_error($e->getMessage());
         }
-    }
-
-    /**
-     * Repariert duplizierte IDs in der Datenbank
-     * 
-     * @since 1.0.0
-     */
-    public function repair_duplicate_ids() {
-        global $wpdb;
-        
-        // Debug-Logging
-        error_log('DeepPoster: Starte Reparatur duplizierter IDs');
-        
-        // Finde duplizierte post_name Einträge
-        $query = "
-            SELECT post_name, COUNT(*) as count
-            FROM {$wpdb->posts}
-            WHERE post_type = 'deepposter_prompt'
-            GROUP BY post_name
-            HAVING count > 1
-        ";
-        
-        $duplicates = $wpdb->get_results($query);
-        $fixed_count = 0;
-        
-        if (!empty($duplicates)) {
-            error_log('DeepPoster: ' . count($duplicates) . ' duplizierte post_name Einträge gefunden');
-            
-            foreach ($duplicates as $duplicate) {
-                // Hole alle Posts mit diesem post_name
-                $posts = $wpdb->get_results(
-                    $wpdb->prepare(
-                        "SELECT ID, post_name FROM {$wpdb->posts} 
-                        WHERE post_type = 'deepposter_prompt' AND post_name = %s
-                        ORDER BY ID ASC",
-                        $duplicate->post_name
-                    )
-                );
-                
-                // Überspringe den ersten Eintrag (behalte ihn)
-                array_shift($posts);
-                
-                // Aktualisiere die restlichen Einträge mit eindeutigen Namen
-                foreach ($posts as $index => $post) {
-                    $new_post_name = $duplicate->post_name . '-' . ($index + 1);
-                    
-                    $wpdb->update(
-                        $wpdb->posts,
-                        array('post_name' => $new_post_name),
-                        array('ID' => $post->ID),
-                        array('%s'),
-                        array('%d')
-                    );
-                    
-                    error_log("DeepPoster: Post ID {$post->ID} umbenannt von {$duplicate->post_name} zu {$new_post_name}");
-                    $fixed_count++;
-                }
-            }
-        } else {
-            error_log('DeepPoster: Keine duplizierten post_name Einträge gefunden');
-        }
-        
-        // Finde duplizierte Metadaten
-        $meta_query = "
-            SELECT post_id, meta_key, COUNT(*) as count
-            FROM {$wpdb->postmeta}
-            WHERE post_id IN (
-                SELECT ID FROM {$wpdb->posts} WHERE post_type = 'deepposter_prompt'
-            )
-            GROUP BY post_id, meta_key
-            HAVING count > 1
-        ";
-        
-        $meta_duplicates = $wpdb->get_results($meta_query);
-        $meta_fixed_count = 0;
-        
-        if (!empty($meta_duplicates)) {
-            error_log('DeepPoster: ' . count($meta_duplicates) . ' duplizierte Metadaten gefunden');
-            
-            foreach ($meta_duplicates as $duplicate) {
-                // Hole alle Metadaten für diesen Post und Schlüssel
-                $metas = $wpdb->get_results(
-                    $wpdb->prepare(
-                        "SELECT meta_id FROM {$wpdb->postmeta} 
-                        WHERE post_id = %d AND meta_key = %s
-                        ORDER BY meta_id ASC",
-                        $duplicate->post_id,
-                        $duplicate->meta_key
-                    )
-                );
-                
-                // Überspringe den ersten Eintrag (behalte ihn)
-                array_shift($metas);
-                
-                // Lösche die restlichen Einträge
-                foreach ($metas as $meta) {
-                    $wpdb->delete(
-                        $wpdb->postmeta,
-                        array('meta_id' => $meta->meta_id),
-                        array('%d')
-                    );
-                    
-                    error_log("DeepPoster: Meta ID {$meta->meta_id} für Post ID {$duplicate->post_id} gelöscht");
-                    $meta_fixed_count++;
-                }
-            }
-        } else {
-            error_log('DeepPoster: Keine duplizierten Metadaten gefunden');
-        }
-        
-        // Cache leeren
-        wp_cache_flush();
-        
-        // Ergebnis zurückgeben
-        $result = array(
-            'success' => true,
-            'data' => array(
-                'message' => sprintf(
-                    'Reparatur abgeschlossen. %d duplizierte Posts und %d duplizierte Metadaten repariert.',
-                    $fixed_count,
-                    $meta_fixed_count
-                ),
-                'fixed_posts' => $fixed_count,
-                'fixed_metas' => $meta_fixed_count
-            )
-        );
-        
-        error_log('DeepPoster: Reparatur abgeschlossen. ' . $fixed_count . ' Posts und ' . $meta_fixed_count . ' Metadaten repariert.');
-        
-        // Sende JSON-Antwort
-        wp_send_json($result);
     }
 } 
