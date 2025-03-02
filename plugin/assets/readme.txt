@@ -10,31 +10,13 @@ Wenn die Dropdown-Liste für Prompts leer bleibt, können Sie folgende Lösungen
    jQuery('select[name="prompt"]').empty().append('<option value="">Prompt auswählen</option>').append('<option value="test1">Test-Prompt 1</option>').append('<option value="test2">Test-Prompt 2</option>').append('<option value="test3">Test-Prompt 3</option>');
    ```
 
-2. **Datenbank-Reparatur-Tool verwenden**
-   Navigieren Sie zu "DeepPoster Prompts > Datenbank-Reparatur" im WordPress-Admin-Menü.
-   Das Tool wird automatisch:
-   - Duplizierte Einträge in der Datenbank reparieren
-   - Einen Test-Prompt erstellen
-   - Den Cache leeren
+2. **Manuell einen Prompt erstellen**
+   Erstellen Sie im WordPress-Admin unter "DeepPoster Prompts" einen neuen Prompt und setzen Sie ihn als aktiv.
 
-3. **Manuelle Datenbank-Reparatur**
+3. **Manuelle Datenbank-Bereinigung**
    Wenn die obigen Methoden nicht funktionieren, können Sie folgende SQL-Befehle in phpMyAdmin oder einem anderen Datenbank-Tool ausführen:
 
    ```sql
-   -- Finde duplizierte post_name Einträge
-   SELECT post_name, COUNT(*) as count
-   FROM wp_posts
-   WHERE post_type = 'deepposter_prompt'
-   GROUP BY post_name
-   HAVING count > 1;
-
-   -- Lösche duplizierte Metadaten
-   DELETE pm1 FROM wp_postmeta pm1
-   INNER JOIN wp_postmeta pm2 
-   WHERE pm1.post_id = pm2.post_id 
-   AND pm1.meta_key = pm2.meta_key 
-   AND pm1.meta_id > pm2.meta_id;
-
    -- Erstelle einen Test-Prompt
    INSERT INTO wp_posts (
        post_author, post_date, post_date_gmt, post_content, post_title, 

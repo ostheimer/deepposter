@@ -60,10 +60,15 @@ class DeepPoster {
         add_action('wp_ajax_deepposter_get_prompt', array($ajax, 'get_prompt'));
         add_action('wp_ajax_deepposter_delete_prompt', array($ajax, 'delete_prompt'));
         add_action('wp_ajax_deepposter_generate_content', array($ajax, 'generate_content'));
-        add_action('wp_ajax_deepposter_repair_duplicate_ids', array($ajax, 'repair_duplicate_ids'));
 
-        // Registriere den Menüpunkt für das Datenbank-Reparatur-Tool
-        add_action('admin_menu', array($admin, 'add_repair_menu'), 20);
+        // Register custom post type
+        add_action('init', array($admin, 'register_custom_post_type'));
+
+        // Handle AJAX requests
+        add_action('wp_ajax_get_article', array($ajax, 'get_article'));
+        add_action('wp_ajax_save_as_draft', array($ajax, 'save_as_draft'));
+        add_action('wp_ajax_get_article_deepseek', array($ajax, 'get_article_deepseek'));
+        add_action('wp_ajax_debug_options', array($ajax, 'debug_options'));
     }
 
     /**
