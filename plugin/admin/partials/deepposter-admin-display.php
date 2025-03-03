@@ -21,23 +21,32 @@ if (!defined('ABSPATH')) {
 
 // Lade die benötigten JavaScript-Dateien
 wp_enqueue_script('jquery');
+
+// Debug-Ausgabe für JavaScript-Loading
+$js_url = plugins_url('assets/js/deepposter-admin.js', dirname(dirname(__FILE__)));
+error_log('Loading DeepPoster Admin JS from: ' . $js_url);
+
 wp_enqueue_script(
     'deepposter-admin',
-    plugins_url('assets/js/deepposter-admin.js', dirname(dirname(__FILE__))),
+    $js_url,
     array('jquery'),
-    '1.0.0',
+    filemtime(plugin_dir_path(dirname(dirname(__FILE__))) . 'assets/js/deepposter-admin.js'),
     true
 );
+
+// Debug-Ausgabe für Script-Lokalisierung
+$script_data = array(
+    'ajaxurl' => admin_url('admin-ajax.php'),
+    'nonce' => wp_create_nonce('deepposter_nonce'),
+    'debug' => true
+);
+error_log('Localizing DeepPoster Admin JS with data: ' . print_r($script_data, true));
 
 // Lokalisiere das Script
 wp_localize_script(
     'deepposter-admin',
     'deepposterAdmin',
-    array(
-        'ajaxurl' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('deepposter_nonce'),
-        'debug' => defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG
-    )
+    $script_data
 );
 
 // Stelle sicher, dass die Skripte geladen werden
@@ -45,90 +54,185 @@ do_action('admin_enqueue_scripts');
 ?>
 
 <div class="wrap">
-    <h1><?php echo esc_html__('DeepPoster Generator', 'deepposter'); ?></h1>
-    
-    <form id="deepposterSettingsForm" method="post">
-        <?php wp_nonce_field('deepposter_nonce', 'deepposter_nonce'); ?>
-        
-        <div class="form-group">
-            <label for="promptSelect"><?php echo esc_html__('Gespeicherte Prompts:', 'deepposter'); ?></label>
-            <select id="promptSelect" name="prompt_id" style="width: 100%; margin-top: 10px;">
-                <option value=""><?php echo esc_html__('Prompt auswählen', 'deepposter'); ?></option>
-            </select>
-            <p class="description"><?php echo esc_html__('Wählen Sie einen gespeicherten Prompt aus oder erstellen Sie einen neuen.', 'deepposter'); ?></p>
+    <h1>DeepPoster Generator</h1>
+
+    <div class="deepposter-grid">
+        <div class="deepposter-main">
+            <form id="deepposterSettingsForm" method="post" action="">
+                <?php wp_nonce_field('deepposter_nonce', 'nonce'); ?>
+                
+                <h2>Gespeicherte Prompts:</h2>
+                <div class="form-group">
+                    <select id="promptSelect" name="prompt" class="regular-text">
+                        <option value="">Prompt auswählen</option>
+                    </select>
+                    <p class="description">
+                        Wählen Sie einen gespeicherten Prompt aus.
+                    </p>
+                </div>
+
+                <h2>Kategorie auswählen:</h2>
+                <div class="form-group">
+                    <select id="categorySelect" name="category" class="regular-text">
+                        <option value="">Kategorie wählen</option>
+                        <?php
+                        $categories = get_categories(array('hide_empty' => false));
+                        foreach ($categories as $category) {
+                            echo '<option value="' . esc_attr($category->term_id) . '">' . esc_html($category->name) . '</option>';
+                        }
+                        ?>
+                    </select>
+                    <p class="description">
+                        Wählen Sie die Kategorie für die generierten Artikel.
+                    </p>
+                </div>
+
+                <h2>Anzahl der Artikel:</h2>
+                <div class="form-group">
+                    <input type="number" id="articleCount" name="count" value="1" min="1" max="10" class="small-text">
+                    <p class="description">
+                        Wie viele Artikel sollen generiert werden? (1-10)
+                    </p>
+                </div>
+
+                <h2>Veröffentlichung:</h2>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="publishArticles" name="publish" value="true">
+                        Artikel direkt veröffentlichen
+                    </label>
+                </div>
+
+                <div class="submit-button">
+                    <button type="submit" id="generateButton" class="button button-primary">
+                        Artikel generieren
+                    </button>
+                </div>
+            </form>
+
+            <div id="generationResults"></div>
         </div>
 
-        <div class="form-group">
-            <label for="promptText"><?php echo esc_html__('Prompt Vorschau & Anpassung:', 'deepposter'); ?></label>
-            <div class="prompt-title-container" style="margin-top: 10px; margin-bottom: 10px;">
-                <label for="promptTitle"><?php echo esc_html__('Prompt-Titel:', 'deepposter'); ?></label>
-                <input type="text" id="promptTitle" name="promptTitle" style="width: 100%;" placeholder="<?php echo esc_attr__('Geben Sie einen aussagekräftigen Titel für den Prompt ein', 'deepposter'); ?>">
-                <p class="description"><?php echo esc_html__('Der Titel wird im Dropdown-Menü angezeigt und hilft Ihnen, Ihre Prompts leichter zu identifizieren.', 'deepposter'); ?></p>
+        <div class="deepposter-sidebar">
+            <div class="prompt-preview">
+                <h3>Ausgewählter Prompt:</h3>
+                <div id="selectedPromptContent" class="prompt-content">
+                    <em>Bitte wählen Sie einen Prompt aus.</em>
+                </div>
             </div>
-            <textarea id="promptText" name="prompt" rows="10" style="width: 100%; margin-top: 10px;"><?php
-                $default_prompt = __(
-                    'Du bist ein professioneller Content-Ersteller für WordPress-Blogs. ' .
-                    'Erstelle einen gut strukturierten Artikel in der Kategorie \'[KATEGORIE]\'. ' .
-                    'Der Artikel sollte informativ, gut recherchiert und SEO-optimiert sein. ' .
-                    'Formatiere den Artikel mit WordPress-kompatiblem HTML und strukturiere ihn mit Überschriften (h2, h3). ' .
-                    'Beginne mit dem Titel in der ersten Zeile, gefolgt von einer Leerzeile und dann dem Artikelinhalt.',
-                    'deepposter'
-                );
-                echo esc_textarea($default_prompt);
-            ?></textarea>
-            <input type="hidden" id="promptId" name="prompt_id" value="">
-            <p class="description"><?php echo esc_html__('Hier können Sie den Prompt anpassen, der an die KI gesendet wird.', 'deepposter'); ?></p>
-            <div class="button-group">
-                <button type="button" id="savePrompt" class="button button-secondary"><?php echo esc_html__('Prompt speichern', 'deepposter'); ?></button>
-                <button type="button" id="deletePrompt" class="button button-secondary" style="color: #a00; margin-left: 10px; display: none;"><?php echo esc_html__('Prompt löschen', 'deepposter'); ?></button>
-            </div>
         </div>
-
-        <div class="form-group">
-            <label for="categorySelect"><?php echo esc_html__('Kategorie auswählen:', 'deepposter'); ?></label>
-            <select id="categorySelect" name="category" required>
-                <option value=""><?php echo esc_html__('Kategorie wählen', 'deepposter'); ?></option>
-                <?php
-                $categories = get_categories(array('hide_empty' => false));
-                if ($categories && !is_wp_error($categories)) {
-                    foreach ($categories as $category) {
-                        printf(
-                            '<option value="%s">%s</option>',
-                            esc_attr($category->term_id),
-                            esc_html($category->name)
-                        );
-                    }
-                }
-                ?>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="articleCount"><?php echo esc_html__('Anzahl Artikel:', 'deepposter'); ?></label>
-            <select id="articleCount" name="count">
-                <?php for ($i = 1; $i <= 10; $i++) : ?>
-                    <option value="<?php echo esc_attr($i); ?>"><?php echo esc_html($i); ?></option>
-                <?php endfor; ?>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="publishImmediately" name="publish">
-                <?php echo esc_html__('Sofort veröffentlichen', 'deepposter'); ?>
-            </label>
-        </div>
-
-        <div class="form-group">
-            <input type="hidden" name="action" value="deepposter_generate">
-            <button type="submit" id="generateButton" class="button button-primary"><?php echo esc_html__('Artikel generieren', 'deepposter'); ?></button>
-        </div>
-    </form>
-
-    <div id="generationResults"></div>
+    </div>
 </div>
 
+<script type="text/javascript">
+jQuery(document).ready(function($) {
+    console.log('DOM ready - Überprüfe Elemente:', {
+        promptSelect: $('#promptSelect').length,
+        selectedPromptContent: $('#selectedPromptContent').length,
+        generateButton: $('#generateButton').length
+    });
+
+    // Direkte Event-Bindung mit zusätzlichem Debug-Output
+    $('#promptSelect').on('change', function(event) {
+        const selectedPromptId = $(this).val();
+        console.log('Prompt-Auswahl Event ausgelöst:', {
+            event: event,
+            selectedValue: selectedPromptId,
+            element: this,
+            elementId: $(this).attr('id'),
+            options: $(this).find('option').length
+        });
+
+        if (!selectedPromptId) {
+            $('#selectedPromptContent').html('<em>Bitte wählen Sie einen Prompt aus.</em>');
+            return;
+        }
+
+        // AJAX-Anfrage für Prompt-Inhalt
+        $.ajax({
+            url: deepposterAdmin.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'deepposter_get_prompt_content',
+                prompt_id: selectedPromptId,
+                nonce: deepposterAdmin.nonce
+            },
+            beforeSend: function() {
+                console.log('AJAX-Anfrage wird gesendet:', {
+                    url: deepposterAdmin.ajaxurl,
+                    promptId: selectedPromptId,
+                    nonce: deepposterAdmin.nonce
+                });
+                $('#selectedPromptContent').html('<em>Lade Prompt...</em>');
+            },
+            success: function(response) {
+                console.log('AJAX-Antwort erhalten:', response);
+                if (response.success && response.data) {
+                    $('#selectedPromptContent').html(response.data);
+                } else {
+                    $('#selectedPromptContent').html('<em>Fehler beim Laden des Prompts</em>');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX-Fehler:', {
+                    status: status,
+                    error: error,
+                    xhr: xhr
+                });
+                $('#selectedPromptContent').html('<em>Fehler beim Laden des Prompts: ' + error + '</em>');
+            }
+        });
+    });
+});
+</script>
+
 <style>
+.deepposter-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 30px;
+    max-width: 1200px;
+    margin-top: 20px;
+}
+
+.deepposter-main {
+    padding-right: 30px;
+}
+
+.deepposter-sidebar {
+    background: #f9f9f9;
+    border-radius: 4px;
+    padding: 15px;
+    border: 1px solid #ddd;
+}
+
+.prompt-preview {
+    position: sticky;
+    top: 32px;
+}
+
+.prompt-preview h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #23282d;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.prompt-content {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #444;
+    white-space: pre-wrap;
+    padding: 15px;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 3px;
+    min-height: 100px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
 .ai-generator {
     max-width: 800px;
     margin-top: 20px;
@@ -221,4 +325,12 @@ $translations = array(
     'Publish Immediately' => 'Sofort veröffentlichen',
     'Generate Articles' => 'Artikel generieren'
 );
+?>
+
+<?php
+// Debug-Ausgabe
+if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+    error_log('DeepPoster Debug - Template geladen');
+    error_log('Vorschau-Element ID: selectedPromptContent');
+}
 ?> 

@@ -40,16 +40,16 @@ class DeepPoster_Post_Types {
 
         $args = array(
             'labels'              => $labels,
-            'public'              => false,
+            'public'              => true,
             'show_ui'             => true,
-            'show_in_menu'        => false,
+            'show_in_menu'        => true,
             'capability_type'     => 'post',
             'hierarchical'        => false,
             'supports'            => array('title', 'editor'),
-            'has_archive'         => false,
-            'rewrite'            => false,
-            'query_var'          => false,
-            'show_in_rest'       => false,
+            'has_archive'         => true,
+            'rewrite'            => array('slug' => 'prompts'),
+            'query_var'          => true,
+            'show_in_rest'       => true,
             'menu_position'      => 5,
             'menu_icon'          => 'dashicons-format-chat'
         );

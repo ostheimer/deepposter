@@ -25,22 +25,42 @@ describe('DeepPoster Admin Tests', () => {
         logs = [];
         errors = [];
 
-        // Intercept AJAX calls for prompts
+        // Interceptor-Zähler für die Prompt-Liste
+        let promptsRequestCount = 0;
+
+        // Intercept AJAX calls for prompts list
         cy.intercept('POST', '**/admin-ajax.php', (req) => {
             if (req.body && req.body.includes('action=deepposter_get_prompts')) {
-                req.reply({
-                    statusCode: 200,
-                    body: {
-                        success: true,
-                        data: {
-                            prompts: [
-                                { id: 1, title: 'Test Prompt 1', content: 'This is test prompt 1' },
-                                { id: 2, title: 'Test Prompt 2', content: 'This is test prompt 2' }
-                            ],
-                            activePrompt: 1
+                promptsRequestCount++;
+                
+                // Nach dem Löschen soll die Liste leer sein
+                if (promptsRequestCount > 3) {
+                    req.reply({
+                        statusCode: 200,
+                        body: {
+                            success: true,
+                            data: {
+                                prompts: {}
+                            }
                         }
-                    }
-                });
+                    });
+                } else {
+                    req.reply({
+                        statusCode: 200,
+                        body: {
+                            success: true,
+                            data: {
+                                prompts: {
+                                    '1': { 
+                                        id: '1', 
+                                        title: 'Test Titel 1740771175427', 
+                                        text: 'Test Prompt to be deleted' 
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
             }
         }).as('promptsRequest');
 
@@ -51,11 +71,11 @@ describe('DeepPoster Admin Tests', () => {
                     statusCode: 200,
                     body: {
                         success: true,
-                        message: 'Prompt saved successfully',
+                        message: 'Prompt erfolgreich gespeichert',
                         data: {
-                            id: 3,
-                            title: 'New Test Prompt',
-                            content: 'This is a new test prompt'
+                            id: '1',
+                            title: 'Test Titel 1740771175427',
+                            text: 'Test Prompt to be deleted'
                         }
                     }
                 });
@@ -71,12 +91,15 @@ describe('DeepPoster Admin Tests', () => {
                         success: true,
                         data: {
                             message: "Prompt erfolgreich gelöscht",
-                            deleted_id: 1
+                            deleted_id: '1'
                         }
                     }
                 });
             }
         }).as('deletePromptRequest');
+
+        cy.visit('/wp-admin/admin.php?page=deepposter');
+        cy.get('#deepposterSettingsForm').should('exist');
     });
 
     describe('Settings Page', () => {
@@ -146,10 +169,10 @@ describe('DeepPoster Admin Tests', () => {
                 
                 // Check form elements
                 cy.get('#promptSelect').should('exist');
-                cy.get('#promptText').should('exist');
-                cy.get('#categorySelect').should('exist');
-                cy.get('#articleCount').should('exist');
-                cy.get('#publishImmediately').should('exist');
+        cy.get('#promptText').should('exist');
+        cy.get('#categorySelect').should('exist');
+        cy.get('#articleCount').should('exist');
+        cy.get('#publishImmediately').should('exist');
                 cy.get('#generateButton').should('exist');
             });
             
@@ -170,7 +193,7 @@ describe('DeepPoster Admin Tests', () => {
             cy.wait('@promptsRequest', { timeout: 10000 });
             
             // Check prompt list with retry
-            cy.get('#promptSelect option', { timeout: 10000 }).should('have.length.at.least', 2).then($options => {
+            cy.get('#promptSelect option', { timeout: 10000 }).should('have.length.at.least', 1).then($options => {
                 cy.log('Found options:', $options.length);
                 $options.each((i, el) => {
                     cy.log('Option:', {
@@ -180,6 +203,10 @@ describe('DeepPoster Admin Tests', () => {
                 });
             });
             
+            // Überprüfe, ob die Felder mit den Prompt-Daten gefüllt wurden
+            cy.get('#promptTitle').should('have.value', 'Test Titel 1740771175427');
+            cy.get('#promptText').should('have.value', 'Test Prompt to be deleted');
+            
             cy.percySnapshot('Dashboard With Prompts', {
                 widths: [1280],
                 percyCSS: successHighlightCSS
@@ -187,6 +214,8 @@ describe('DeepPoster Admin Tests', () => {
         });
         
         it('deletes prompts successfully', () => {
+            cy.visitDeepPoster();
+            
             // Warte auf das Formular
             cy.get('form#deepposterSettingsForm').should('exist');
             
@@ -196,25 +225,144 @@ describe('DeepPoster Admin Tests', () => {
               .type('Test Prompt to be deleted')
               .should('not.be.empty');
               
+            // Fülle den Prompt-Titel aus
+            cy.get('#promptTitle').should('exist')
+              .clear()
+              .type('Test Titel 1740771175427')
+              .should('not.be.empty');
+              
             // Speichere zuerst einen neuen Prompt
             cy.get('#savePrompt').should('exist').click();
             
-            // Warte auf Erfolgsmeldung
-            cy.get('.notice-success').should('contain', 'erfolgreich gespeichert');
+            // Warte auf die Speichern-Anfrage
+            cy.wait('@savePromptRequest').then((interception) => {
+                expect(interception.response.body.success).to.be.true;
+                expect(interception.response.body.message).to.contain('erfolgreich gespeichert');
+            });
+            
+            // Warte auf Erfolgsmeldung oder unsere eigene Benachrichtigung
+            cy.get('.notice-success, .deepposter-notice.success').should('exist').should('contain', 'erfolgreich gespeichert');
+            
+            // Warte auf die Aktualisierung der Dropdown-Liste
+            cy.wait('@promptsRequest').then((interception) => {
+                expect(interception.response.body.success).to.be.true;
+                expect(interception.response.body.data.prompts['1']).to.exist;
+            });
+            
+            // Warte darauf, dass die Option im Dropdown erscheint
+            cy.get('#promptSelect option').should('have.length.at.least', 1);
+            
+            // Wähle den neu erstellten Prompt aus
+            cy.get('#promptSelect').select('1');
+            
+            // Warte auf die Prompt-Details-Anfrage
+            cy.wait('@promptsRequest').then((interception) => {
+                expect(interception.response.body.success).to.be.true;
+                expect(interception.response.body.data.prompts['1']).to.exist;
+            });
+            
+            // Warte darauf, dass die Felder gefüllt werden
+            cy.get('#promptTitle').should('have.value', 'Test Titel 1740771175427');
+            cy.get('#promptText').should('have.value', 'Test Prompt to be deleted');
+            
+            // Warte darauf, dass der Löschen-Button sichtbar ist
+            cy.get('#deletePrompt, [data-test="delete-prompt-button"]')
+              .should('be.visible');
               
             // Bestätigungsdialog simulieren
             cy.on('window:confirm', () => true);
             
-            // Delete Button sollte nun sichtbar sein - klicke ihn
-            cy.get('#deletePrompt').should('be.visible').click();
+            // Klicke den Löschen-Button
+            cy.get('#deletePrompt, [data-test="delete-prompt-button"]').click();
             
-            // Erfolgsmeldung für das Löschen sollte angezeigt werden
-            cy.get('.notice-success').should('contain', 'gelöscht');
+            // Warte auf die Lösch-Anfrage
+            cy.wait('@deletePromptRequest').then((interception) => {
+                expect(interception.response.body.success).to.be.true;
+                expect(interception.response.body.data.message).to.contain('erfolgreich gelöscht');
+            });
+            
+            // Warte auf die Aktualisierung der Dropdown-Liste
+            cy.wait('@promptsRequest').then((interception) => {
+                expect(interception.response.body.success).to.be.true;
+                expect(Object.keys(interception.response.body.data.prompts).length).to.equal(0);
+            });
+            
+            // Warte darauf, dass die Felder geleert werden
+            cy.get('#promptTitle').should('have.value', '');
+            cy.get('#promptText').should('have.value', '');
+            
+            // Der Löschen-Button sollte nicht mehr sichtbar sein
+            cy.get('#deletePrompt, [data-test="delete-prompt-button"]').should('not.be.visible');
             
             cy.percySnapshot('After Prompt Deletion', {
                 widths: [1280],
                 percyCSS: successHighlightCSS
             });
+        });
+    });
+
+    it('loads prompts into dropdown', () => {
+        cy.get('#promptSelect').should('exist');
+        cy.get('#promptSelect option').should('have.length.at.least', 1);
+    });
+
+    it('allows selecting a category', () => {
+        cy.get('#categorySelect').should('exist');
+        cy.get('#categorySelect option').should('have.length.at.least', 1);
+    });
+
+    it('allows setting article count', () => {
+        cy.get('#articleCount').should('exist')
+            .should('have.value', '1')
+            .type('{selectall}3')
+            .should('have.value', '3');
+    });
+
+    it('allows toggling publish status', () => {
+        cy.get('#publishArticles').should('exist')
+            .should('not.be.checked')
+            .check()
+            .should('be.checked');
+    });
+
+    it('shows generation results', () => {
+        cy.get('#promptSelect').select('1');
+        cy.get('#categorySelect').select('1');
+        cy.get('#articleCount').type('{selectall}1');
+        cy.get('#publishArticles').check();
+        
+        cy.intercept('POST', '**/admin-ajax.php').as('generateRequest');
+        
+        cy.get('#generateButton').click();
+        
+        cy.wait('@generateRequest').then((interception) => {
+            if (interception.response.statusCode === 200 && interception.response.body.success) {
+                cy.get('#generationResults').should('be.visible');
+            }
+        });
+    });
+
+    it('shows prompt preview when selecting a prompt', () => {
+        // Warte auf das Formular
+        cy.get('form#deepposterSettingsForm').should('exist');
+        
+        // Warte auf die Dropdown-Liste
+        cy.get('#promptSelect').should('exist');
+        
+        // Wähle einen Prompt aus
+        cy.get('#promptSelect').select('1');
+
+        // Warte auf die AJAX-Anfrage
+        cy.wait('@promptsRequest');
+        
+        // Überprüfe, ob der Prompt-Inhalt in der Seitenleiste angezeigt wird
+        cy.get('#selectedPromptContent')
+            .should('be.visible')
+            .should('contain', 'Test Prompt to be deleted');
+            
+        cy.percySnapshot('Prompt Preview Visible', {
+            widths: [1280],
+            percyCSS: successHighlightCSS
         });
     });
 
