@@ -23,3 +23,15 @@
 //
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
+
+Cypress.Commands.add('login', (username, password) => {
+    cy.session([username, password], () => {
+        cy.visit('/wp-login.php');
+        cy.get('#user_login').type(username);
+        cy.get('#user_pass').type(password);
+        cy.get('#wp-submit').click();
+        
+        // Warte auf erfolgreichen Login
+        cy.get('body').should('have.class', 'wp-admin');
+    });
+});

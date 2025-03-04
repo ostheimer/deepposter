@@ -20,6 +20,7 @@ class DeepPoster_Ajax {
         add_action('wp_ajax_deepposter_save_prompt', array($this, 'save_prompt'));
         add_action('wp_ajax_deepposter_delete_prompt', array($this, 'delete_prompt'));
         add_action('wp_ajax_deepposter_generate', array($this, 'generate_articles'));
+        add_action('wp_ajax_deepposter_get_models', array($this, 'get_models'));
     }
 
     /**
@@ -89,86 +90,155 @@ class DeepPoster_Ajax {
         }
 
         // Validiere Eingaben
+        $prompt_id = isset($_POST['prompt']) ? intval($_POST['prompt']) : 0;
         $category_id = isset($_POST['category']) ? intval($_POST['category']) : 0;
         $count = isset($_POST['count']) ? min(10, max(1, intval($_POST['count']))) : 1;
         $should_publish = isset($_POST['publish']) && $_POST['publish'] === 'true';
-        $prompt = isset($_POST['prompt']) ? sanitize_textarea_field($_POST['prompt']) : '';
 
         if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
             error_log('DeepPoster Debug - AJAX Handler - Validierte Eingaben:');
+            error_log('Prompt ID: ' . $prompt_id);
             error_log('Kategorie: ' . $category_id);
             error_log('Anzahl: ' . $count);
             error_log('Veröffentlichen: ' . ($should_publish ? 'ja' : 'nein'));
-            error_log('Prompt Länge: ' . strlen($prompt));
-        }
-
-        // Validiere Kategorie
-        if ($category_id <= 0) {
-            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - AJAX Handler - Keine gültige Kategorie');
-            }
-            wp_send_json_error('Bitte wählen Sie eine Kategorie aus.');
-            return;
         }
 
         // Validiere Prompt
-        if (empty($prompt)) {
+        $prompt_post = get_post($prompt_id);
+        if (!$prompt_post || $prompt_post->post_type !== 'deepposter_prompt') {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - AJAX Handler - Kein Prompt');
+                error_log('DeepPoster Debug - AJAX Handler - Ungültiger Prompt');
             }
-            wp_send_json_error('Bitte geben Sie einen Prompt ein.');
+            wp_send_json_error('Bitte wählen Sie einen gültigen Prompt aus.');
+            return;
+        }
+
+        // Validiere Kategorie
+        $category = get_category($category_id);
+        if (!$category) {
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - AJAX Handler - Ungültige Kategorie');
+            }
+            wp_send_json_error('Bitte wählen Sie eine gültige Kategorie aus.');
             return;
         }
 
         try {
-            // Hole OpenAI API Key
-            $api_key = get_option('deepposter_openai_key');
+            $generated_articles = array();
+            $prompt_content = $prompt_post->post_content;
+
+            // Hole die API-Einstellungen
+            $api_key = get_option('deepposter_openai_api_key', '');
+            $model = get_option('deepposter_openai_model', 'gpt-3.5-turbo');
+
             if (empty($api_key)) {
+                throw new Exception('OpenAI API-Schlüssel nicht konfiguriert.');
+            }
+
+            // Erstelle für jede Anfrage einen neuen Artikel
+            for ($i = 0; $i < $count; $i++) {
                 if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                    error_log('DeepPoster Debug - AJAX Handler - Kein API Key');
+                    error_log('DeepPoster Debug - Generiere Artikel ' . ($i + 1) . ' von ' . $count);
                 }
-                wp_send_json_error('Bitte hinterlegen Sie zuerst Ihren OpenAI API Key in den Einstellungen.');
-                return;
-            }
 
-            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - AJAX Handler - Initialisiere Generator');
-            }
-
-            // Initialisiere Generator
-            require_once DEEPPOSTER_PLUGIN_DIR . 'includes/class-deepposter-generator.php';
-            $generator = new DeepPoster_Generator($api_key);
-            
-            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - AJAX Handler - Generator initialisiert');
-                error_log('DeepPoster Debug - AJAX Handler - Starte Artikelgenerierung');
-            }
-
-            // Generiere Artikel
-            $posts = $generator->generate_posts($category_id, $count, $should_publish, $prompt);
-            
-            if (empty($posts)) {
-                if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                    error_log('DeepPoster Debug - AJAX Handler - Keine Posts generiert');
+                // Generiere den Artikel mit OpenAI
+                $article_content = $this->generate_article_with_openai($prompt_content, $api_key, $model);
+                
+                if (empty($article_content)) {
+                    throw new Exception('Keine Antwort von OpenAI erhalten.');
                 }
-                wp_send_json_error('Es konnten keine Artikel generiert werden.');
-                return;
+
+                // Erstelle den WordPress-Artikel
+                $post_data = array(
+                    'post_title'    => wp_strip_all_tags($article_content['title']),
+                    'post_content'  => wp_kses_post($article_content['content']),
+                    'post_status'   => $should_publish ? 'publish' : 'draft',
+                    'post_author'   => get_current_user_id(),
+                    'post_category' => array($category_id)
+                );
+
+                // Füge den Artikel ein
+                $post_id = wp_insert_post($post_data);
+
+                if (is_wp_error($post_id)) {
+                    throw new Exception('Fehler beim Erstellen des Artikels: ' . $post_id->get_error_message());
+                }
+
+                // Füge den Artikel zur Ergebnisliste hinzu
+                $generated_articles[] = array(
+                    'id' => $post_id,
+                    'title' => get_the_title($post_id),
+                    'edit_url' => get_edit_post_link($post_id, 'url'),
+                    'view_url' => get_permalink($post_id)
+                );
             }
 
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - AJAX Handler - Generierung erfolgreich');
-                error_log('Generierte Posts: ' . print_r($posts, true));
+                error_log('DeepPoster Debug - Artikel erfolgreich generiert: ' . print_r($generated_articles, true));
             }
 
-            wp_send_json_success($posts);
+            wp_send_json_success($generated_articles);
+
         } catch (Exception $e) {
             if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-                error_log('DeepPoster Debug - AJAX Handler - Fehler bei der Generierung:');
-                error_log('Message: ' . $e->getMessage());
-                error_log('Stack Trace: ' . $e->getTraceAsString());
+                error_log('DeepPoster Debug - Fehler bei der Artikel-Generierung: ' . $e->getMessage());
             }
             wp_send_json_error($e->getMessage());
         }
+    }
+
+    /**
+     * Generiert einen Artikel mit OpenAI
+     */
+    private function generate_article_with_openai($prompt, $api_key, $model) {
+        $url = 'https://api.openai.com/v1/chat/completions';
+        
+        $headers = array(
+            'Authorization' => 'Bearer ' . $api_key,
+            'Content-Type' => 'application/json'
+        );
+
+        $body = array(
+            'model' => $model,
+            'messages' => array(
+                array(
+                    'role' => 'system',
+                    'content' => 'Du bist ein professioneller Content-Ersteller. Generiere einen Artikel im folgenden Format: {title: "Titel", content: "Inhalt"}. Der Inhalt sollte gut strukturiert und SEO-optimiert sein.'
+                ),
+                array(
+                    'role' => 'user',
+                    'content' => $prompt
+                )
+            ),
+            'temperature' => 0.7
+        );
+
+        $response = wp_remote_post($url, array(
+            'headers' => $headers,
+            'body' => json_encode($body),
+            'timeout' => 60
+        ));
+
+        if (is_wp_error($response)) {
+            throw new Exception('OpenAI API Fehler: ' . $response->get_error_message());
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if (!isset($body['choices'][0]['message']['content'])) {
+            throw new Exception('Ungültige Antwort von OpenAI');
+        }
+
+        $content = $body['choices'][0]['message']['content'];
+        
+        // Versuche, das JSON zu parsen
+        $article_data = json_decode($content, true);
+        
+        if (!$article_data || !isset($article_data['title']) || !isset($article_data['content'])) {
+            throw new Exception('Ungültiges Artikel-Format von OpenAI');
+        }
+
+        return $article_data;
     }
 
     /**
@@ -327,7 +397,14 @@ class DeepPoster_Ajax {
             error_log('DeepPoster Debug - AJAX Handler - Prompts: ' . print_r($result, true));
         }
 
-        wp_send_json_success(array('prompts' => $result));
+        // Prüfe, ob wir auf der Generator-Seite sind
+        $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '';
+        $is_generator_page = strpos($referer, 'page=deepposter') !== false && strpos($referer, 'deepposter-settings') === false;
+
+        wp_send_json_success(array(
+            'prompts' => $result,
+            'show_notice' => $is_generator_page
+        ));
     }
     
     /**
@@ -378,44 +455,40 @@ class DeepPoster_Ajax {
     }
 
     /**
-     * Hole Prompt-Inhalt für die Vorschau
+     * Lädt den Inhalt eines Prompts für die Vorschau
      */
     public function get_prompt_content() {
         // Debug-Logging
-        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - get_prompt_content aufgerufen');
-            error_log('POST Daten: ' . print_r($_POST, true));
-        }
-
-        // Prüfe Nonce
+        error_log('DeepPoster Debug - get_prompt_content aufgerufen mit POST-Daten: ' . print_r($_POST, true));
+        
+        // Sicherheitscheck
         check_ajax_referer('deepposter_nonce', 'nonce');
-
-        // Prüfe Berechtigungen
-        if (!current_user_can('read')) {
-            wp_send_json_error('Keine Berechtigung zum Lesen von Prompts.');
-            return;
-        }
-
-        // Validiere Prompt-ID
+        
+        // Validiere Prompt ID
         $prompt_id = isset($_POST['prompt_id']) ? intval($_POST['prompt_id']) : 0;
         if (!$prompt_id) {
-            wp_send_json_error('Keine gültige Prompt-ID angegeben.');
+            wp_send_json_error('Keine gültige Prompt-ID');
             return;
         }
-
+        
         // Hole den Prompt
         $prompt = get_post($prompt_id);
         if (!$prompt || $prompt->post_type !== 'deepposter_prompt') {
-            wp_send_json_error('Prompt nicht gefunden.');
+            wp_send_json_error('Prompt nicht gefunden');
             return;
         }
-
-        if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
-            error_log('DeepPoster Debug - Prompt gefunden: ' . print_r($prompt, true));
-        }
-
-        // Sende den Prompt-Inhalt zurück
-        wp_send_json_success($prompt->post_content);
+        
+        // Extrem vereinfachte Antwort ohne Filter
+        $response_data = array(
+            'title' => $prompt->post_title,
+            'content' => $prompt->post_content,
+            'id' => $prompt->ID
+        );
+        
+        error_log('DeepPoster Debug - Sende Prompt-Daten: ' . print_r($response_data, true));
+        
+        // Sende die Antwort direkt ohne Filter
+        wp_send_json_success($response_data);
     }
 
     /**
@@ -482,4 +555,74 @@ class DeepPoster_Ajax {
      * @since 1.0.0
      */
     /* Methode entfernt: repair_duplicate_ids */
+
+    /**
+     * Holt die verfügbaren OpenAI Modelle
+     */
+    public function get_models() {
+        try {
+            // Debug-Logging
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - get_models aufgerufen');
+            }
+
+            // Prüfe Nonce
+            check_ajax_referer('deepposter_nonce', 'nonce');
+
+            // Prüfe Berechtigungen
+            if (!current_user_can('manage_options')) {
+                throw new Exception('Keine Berechtigung zum Abrufen der Modelle.');
+            }
+
+            // Hole den API Key
+            $api_key = get_option('deepposter_openai_api_key', '');
+            if (empty($api_key)) {
+                throw new Exception('OpenAI API-Schlüssel nicht konfiguriert.');
+            }
+
+            // OpenAI API Anfrage
+            $response = wp_remote_get('https://api.openai.com/v1/models', array(
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type' => 'application/json'
+                ),
+                'timeout' => 15
+            ));
+
+            if (is_wp_error($response)) {
+                throw new Exception('API Fehler: ' . $response->get_error_message());
+            }
+
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+
+            if (!isset($body['data']) || !is_array($body['data'])) {
+                throw new Exception('Ungültige API-Antwort');
+            }
+
+            // Filtere die relevanten Modelle
+            $models = array_filter($body['data'], function($model) {
+                return strpos($model['id'], 'gpt-') === 0;
+            });
+
+            // Sortiere die Modelle
+            usort($models, function($a, $b) {
+                // GPT-4 Modelle zuerst
+                if (strpos($a['id'], 'gpt-4') === 0 && strpos($b['id'], 'gpt-4') !== 0) {
+                    return -1;
+                }
+                if (strpos($a['id'], 'gpt-4') !== 0 && strpos($b['id'], 'gpt-4') === 0) {
+                    return 1;
+                }
+                return strcmp($a['id'], $b['id']);
+            });
+
+            wp_send_json_success(array_values($models));
+
+        } catch (Exception $e) {
+            if (defined('DEEPPOSTER_DEBUG') && DEEPPOSTER_DEBUG) {
+                error_log('DeepPoster Debug - Fehler in get_models: ' . $e->getMessage());
+            }
+            wp_send_json_error($e->getMessage());
+        }
+    }
 } 

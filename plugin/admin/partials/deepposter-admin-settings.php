@@ -15,6 +15,7 @@ if (!defined('ABSPATH')) {
 
 // Load required JavaScript files
 wp_enqueue_script('jquery');
+wp_enqueue_style('dashicons');
 wp_enqueue_script(
     'deepposter-admin',
     plugins_url('assets/js/deepposter-admin.js', dirname(dirname(__FILE__))),
@@ -39,104 +40,23 @@ do_action('admin_enqueue_scripts');
 ?>
 
 <div class="wrap">
-    <h1>DeepPoster Settings</h1>
+    <h1>DeepPoster Einstellungen</h1>
+    
+    <?php if (isset($_GET['settings-updated']) && $_GET['settings-updated'] === 'true'): ?>
+        <div id="setting-error-settings_updated" class="notice notice-success settings-error is-dismissible"> 
+            <p><strong>Einstellungen gespeichert.</strong></p>
+            <button type="button" class="notice-dismiss">
+                <span class="screen-reader-text">Diese Meldung ausblenden.</span>
+            </button>
+        </div>
+    <?php endif; ?>
     
     <form method="post" action="options.php">
         <?php
         settings_fields('deepposter_settings');
         do_settings_sections('deepposter_settings');
+        submit_button('Einstellungen speichern');
         ?>
-        
-        <table class="form-table">
-            <tr>
-                <th scope="row">
-                    <label for="api_provider">AI Provider</label>
-                </th>
-                <td>
-                    <select name="deepposter_api_provider" id="api_provider">
-                        <option value="openai" <?php selected(get_option('deepposter_api_provider'), 'openai'); ?>>OpenAI</option>
-                        <option value="deepseek" <?php selected(get_option('deepposter_api_provider'), 'deepseek'); ?>>DeepSeek</option>
-                    </select>
-                    <p class="description">Select your AI provider</p>
-                </td>
-            </tr>
-            
-            <tr>
-                <th scope="row">
-                    <label for="openai_key">OpenAI API Key</label>
-                </th>
-                <td>
-                    <input type="password" 
-                           id="openai_key" 
-                           name="deepposter_openai_key" 
-                           value="<?php echo esc_attr(get_option('deepposter_openai_key')); ?>" 
-                           class="regular-text">
-                    <p class="description">Enter your OpenAI API key</p>
-                </td>
-            </tr>
-            
-            <tr>
-                <th scope="row">
-                    <label for="deepseek_key">DeepSeek API Key</label>
-                </th>
-                <td>
-                    <input type="password" 
-                           id="deepseek_key" 
-                           name="deepposter_deepseek_key" 
-                           value="<?php echo esc_attr(get_option('deepposter_deepseek_key')); ?>" 
-                           class="regular-text">
-                    <p class="description">Enter your DeepSeek API key</p>
-                </td>
-            </tr>
-            
-            <tr>
-                <th scope="row">
-                    <label for="model_selection">Model Selection</label>
-                </th>
-                <td>
-                    <select name="deepposter_model" id="model_selection">
-                        <option value="gpt-4" <?php selected(get_option('deepposter_model'), 'gpt-4'); ?>>GPT-4</option>
-                        <option value="gpt-3.5-turbo" <?php selected(get_option('deepposter_model'), 'gpt-3.5-turbo'); ?>>GPT-3.5 Turbo</option>
-                        <option value="deepseek-chat" <?php selected(get_option('deepposter_model'), 'deepseek-chat'); ?>>DeepSeek Chat</option>
-                    </select>
-                    <p class="description">Select the AI model to use</p>
-                </td>
-            </tr>
-            
-            <tr>
-                <th scope="row">
-                    <label for="max_tokens">Max Tokens</label>
-                </th>
-                <td>
-                    <input type="number" 
-                           id="max_tokens" 
-                           name="deepposter_max_tokens" 
-                           value="<?php echo esc_attr(get_option('deepposter_max_tokens', 10000)); ?>"
-                           min="1" 
-                           max="128000" 
-                           step="1">
-                    <p class="description">Maximum number of tokens per request (1-128000)</p>
-                </td>
-            </tr>
-            
-            <tr>
-                <th scope="row">
-                    <label for="temperature">Temperature</label>
-                </th>
-                <td>
-                    <input type="number" 
-                           id="temperature" 
-                           name="deepposter_temperature" 
-                           value="<?php echo esc_attr(get_option('deepposter_temperature', 0.7)); ?>"
-                           min="0" 
-                           max="1" 
-                           step="0.1">
-                    <p class="description">AI creativity level (0 = conservative, 1 = creative)</p>
-                </td>
-            </tr>
-        </table>
-        
-        <?php submit_button('Save Settings'); ?>
     </form>
 </div>
 
@@ -154,7 +74,51 @@ do_action('admin_enqueue_scripts');
     margin-top: 5px;
     color: #666;
 }
+.notice-dismiss {
+    position: absolute;
+    top: 0;
+    right: 1px;
+    border: none;
+    margin: 0;
+    padding: 9px;
+    background: none;
+    color: #787c82;
+    cursor: pointer;
+}
+.notice-dismiss:before {
+    background: none;
+    color: #787c82;
+    content: "\f153";
+    display: block;
+    font: normal 16px/20px dashicons;
+    speak: never;
+    height: 20px;
+    text-align: center;
+    width: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+.notice-dismiss:hover:before {
+    color: #d63638;
+}
 </style>
+
+<script>
+jQuery(document).ready(function($) {
+    // Entferne die "Prompts geladen" Meldung sofort
+    $('.notice:contains("Prompts geladen")').remove();
+    
+    // Event-Handler für das Ausblenden der Erfolgsmeldung
+    $('.notice-dismiss').on('click', function() {
+        $(this).closest('.notice').fadeOut();
+    });
+
+    // Entferne die "Prompts geladen" Meldung auch nach AJAX-Requests
+    $(document).ajaxComplete(function() {
+        $('.notice:contains("Prompts geladen")').remove();
+    });
+});
+</script>
 
 <?php
 // Deutsche Übersetzung der Einstellungsseite

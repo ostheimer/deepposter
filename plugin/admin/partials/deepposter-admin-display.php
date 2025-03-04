@@ -119,6 +119,8 @@ do_action('admin_enqueue_scripts');
                 <div id="selectedPromptContent" class="prompt-content">
                     <em>Bitte wählen Sie einen Prompt aus.</em>
                 </div>
+                
+                <!-- Temporärer Test-Bereich wurde entfernt, da nicht mehr benötigt -->
             </div>
         </div>
     </div>
@@ -126,63 +128,55 @@ do_action('admin_enqueue_scripts');
 
 <script type="text/javascript">
 jQuery(document).ready(function($) {
-    console.log('DOM ready - Überprüfe Elemente:', {
-        promptSelect: $('#promptSelect').length,
-        selectedPromptContent: $('#selectedPromptContent').length,
-        generateButton: $('#generateButton').length
-    });
-
-    // Direkte Event-Bindung mit zusätzlichem Debug-Output
-    $('#promptSelect').on('change', function(event) {
-        const selectedPromptId = $(this).val();
-        console.log('Prompt-Auswahl Event ausgelöst:', {
-            event: event,
-            selectedValue: selectedPromptId,
-            element: this,
-            elementId: $(this).attr('id'),
-            options: $(this).find('option').length
-        });
-
-        if (!selectedPromptId) {
+    console.log('DOM ready - Optimierte Implementierung');
+    
+    // Direkter Event-Handler für Dropdown-Änderungen
+    $('#promptSelect').on('change', function() {
+        var promptId = $(this).val();
+        console.log('Prompt-ID geändert zu:', promptId);
+        
+        if (!promptId) {
             $('#selectedPromptContent').html('<em>Bitte wählen Sie einen Prompt aus.</em>');
             return;
         }
-
-        // AJAX-Anfrage für Prompt-Inhalt
+        
+        // Ladestatus anzeigen
+        $('#selectedPromptContent').html('<em>Lade Prompt...</em>');
+        
+        // Optimierte AJAX-Anfrage basierend auf der erfolgreichen Testversion
         $.ajax({
             url: deepposterAdmin.ajaxurl,
             type: 'POST',
             data: {
                 action: 'deepposter_get_prompt_content',
-                prompt_id: selectedPromptId,
+                prompt_id: promptId,
                 nonce: deepposterAdmin.nonce
             },
-            beforeSend: function() {
-                console.log('AJAX-Anfrage wird gesendet:', {
-                    url: deepposterAdmin.ajaxurl,
-                    promptId: selectedPromptId,
-                    nonce: deepposterAdmin.nonce
-                });
-                $('#selectedPromptContent').html('<em>Lade Prompt...</em>');
-            },
             success: function(response) {
-                console.log('AJAX-Antwort erhalten:', response);
-                if (response.success && response.data) {
-                    $('#selectedPromptContent').html(response.data);
+                console.log('AJAX-Antwort:', response);
+                
+                if (response && response.success && response.data && response.data.content) {
+                    // Content direkt in das DOM-Element einfügen
+                    $('#selectedPromptContent').html(response.data.content);
+                    console.log('Prompt-Inhalt erfolgreich geladen');
                 } else {
                     $('#selectedPromptContent').html('<em>Fehler beim Laden des Prompts</em>');
+                    console.error('Fehlerhafte Antwortdaten:', response);
                 }
             },
             error: function(xhr, status, error) {
-                console.error('AJAX-Fehler:', {
-                    status: status,
-                    error: error,
-                    xhr: xhr
-                });
-                $('#selectedPromptContent').html('<em>Fehler beim Laden des Prompts: ' + error + '</em>');
+                $('#selectedPromptContent').html('<em>Fehler: ' + error + '</em>');
+                console.error('AJAX-Fehler:', status, error);
             }
         });
     });
+    
+    // Initiale Ladung des ausgewählten Prompts
+    var initialPromptId = $('#promptSelect').val();
+    if (initialPromptId) {
+        console.log('Lade initialen Prompt:', initialPromptId);
+        $('#promptSelect').trigger('change');
+    }
 });
 </script>
 
