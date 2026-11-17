@@ -1,12 +1,22 @@
-<!-- BEGIN: agent-pr-quality-v1 -->
-## KI-Änderungen und PR-Qualität
+# DeepPoster – WordPress-Plugin für KI-generierte Beiträge
 
-Diese drei Regeln gelten für KI-erstellte oder wesentlich KI-bearbeitete Änderungen. Bei Widersprüchen zu älteren Vorgaben zu PR-Größe, Testnachweisen oder API-Prüfung gilt dieser Abschnitt; sonstige Projekt-, Sicherheits- und Freigabegrenzen bleiben bestehen.
+WordPress-Plugin (PHP, Hauptdatei `plugin/deepposter.php`, Version in `DEEPPOSTER_VERSION`), das mit OpenAI (Chat Completions, Modellliste über `/v1/models`) oder DeepSeek Blogbeiträge aus gespeicherten Prompts erzeugt, mit Vorschau und Planungsfunktion. Prompts liegen als eigener Post Type. Anforderungen (Entwurfsstand, Projektname dort „DeepBlogger“): `SoftwareRequirements.md`; Ideen: `plugin/docs/future-enhancements.md`.
 
-1. **Kleine, zusammenhängende PRs.** Ein PR behandelt ein klar benanntes Problem oder Ergebnis. Unabhängige Features, Refactorings und Formatierungen trennen. Zusammengehörige Implementierung, Tests und nötige Dokumentation bleiben gemeinsam; keine künstlichen Mini-PRs oder starren Zeilenlimits. Größere untrennbare Änderungen im PR begründen und prüfbar gliedern.
-2. **Verhaltensänderungen brauchen einen wirksamen Test.** Bei Bugfixes zuerst einen reproduzierenden Regressionstest schreiben und seinen Fehlschlag am unveränderten Stand bestätigen; danach muss derselbe Test mit dem Fix bestehen. Für neue Funktionen einen passenden Akzeptanztest analog vor/nach der Implementierung prüfen. Bei bereits geschriebenem Code die Gegenprobe isoliert gegen den Ausgangsstand oder mit gezielt zurückgenommener Implementierung ausführen, ohne fremde Arbeit anzutasten. Der rote Nachweis muss am fehlenden/falschen Verhalten liegen, nicht an einer kaputten Testumgebung. Test, Befehl, Ausgangs-/Änderungsstand und Ergebnisse im PR dokumentieren. Ist eine automatisierte Gegenprobe sachlich nicht sinnvoll oder sicher möglich, konkrete Begründung und einen gleichwertigen reproduzierbaren Prüfnachweis festhalten; nie einen Rot-Grün-Nachweis erfinden. Bestehende Tests nicht abschwächen, nur um Grün zu erhalten.
-3. **Funktionen, APIs und Pakete gezielt prüfen.** Im Review neue oder geänderte Aufrufe, Imports und Abhängigkeiten auf Existenz und Kompatibilität mit der tatsächlich eingesetzten Version prüfen: Repository-Definition/Export, Manifest und Lockfile sowie bei externen APIs die offizielle Dokumentation oder Paketquelle abgleichen. Signaturen und Rückgabewerte mitprüfen. Neue Pakete auch auf korrekten Namen und Herkunft prüfen. Typecheck, Build und passende Integrationstests ergänzen diesen Abgleich; grüne Tests mit gemockten APIs allein sind kein Existenznachweis. Quellen/Prüfbefehle und Ergebnis im PR festhalten.
+## Umgebung und Betrieb
 
-**Doku-Ausnahme:** Reine, nicht ausführbare Dokumentations- oder Kommentaränderungen ohne Einfluss auf Verhalten, Build, Konfiguration, Schema oder Abhängigkeiten benötigen keinen künstlich fehlschlagenden Test. Stattdessen zutreffende Text-, Link-, Beispiel- und Konsistenzprüfungen dokumentieren. Ausführbare Codebeispiele, generierte Konfiguration oder als Programmeingabe genutzte Dokumente sind nicht automatisch ausgenommen. Gemischte PRs prüfen den verhaltensändernden Teil regulär. Die Ausnahme im PR ausdrücklich begründen.
-<!-- END: agent-pr-quality-v1 -->
+- Es gibt weder CI noch einen im Repo beschriebenen Deploy-Weg; das Plugin wird von Hand in WordPress installiert. Production-URLs und Server sind im Repo nicht belegt.
+- Lokal: `docker/docker-compose.yml` startet WordPress (PHP 8.2) auf `http://localhost:8000` und MySQL 8; `plugin/` ist als `wp-content/plugins/deepposter` eingehängt. Die Image-Plattform ist `linux/arm64/v8` (Apple Silicon).
+- Einstellungen (API-Schlüssel, Provider, Modell, Max Tokens, Temperatur) stehen in WordPress-Optionen mit Präfix `deepposter_`.
+- E2E-Tests: Cypress gegen `http://localhost:8000`. Im Wurzelverzeichnis `npm run cy:run` (Specs `cypress/e2e/`), im Ordner `plugin/` eine zweite Suite (`plugin/cypress/e2e/`) mit Zugangsdaten aus `plugin/cypress.env.json` und Percy (`npm run percy:run`, braucht `PERCY_TOKEN`).
 
+## Fallen
+
+- `node_modules/` im Wurzelverzeichnis ist eingecheckt (rund 7.850 Dateien); `.gitignore` schließt es nicht aus. Ein `npm install` erzeugt daher große Diffs.
+- Mehrere Dateien liegen doppelt: `plugin/includes/` und `plugin/assets/includes/`, `plugin/assets/js/` und `plugin/admin/js/`, dazu Kopien unter `assets/` und `admin/js/` im Wurzelverzeichnis. `plugin/deepposter.php` lädt nur `plugin/includes/*` und `plugin/admin/class-deepposter-admin.php`; Änderungen in den anderen Kopien wirken dort nicht, ob sie anderswo eingebunden werden, ist nicht geprüft.
+- Die Schlüssel-Optionen sind uneinheitlich benannt: `deepposter_openai_api_key` (AJAX-Generierung, Admin-Klasse) und `deepposter_openai_key` (`generator.php`, `templates/settings.php`) sowie `deepposter_deepseek_key` und `deepposter_deepseek_api_key`. Ein unter dem anderen Namen gespeicherter Schlüssel wird an der jeweiligen Stelle nicht gefunden.
+- `plugin/deepposter.php` schaltet `DEEPPOSTER_DEBUG`, `WP_DEBUG` und `WP_DEBUG_LOG` fest an; Logs landen in `wp-content/debug.log`.
+
+## Konventionen
+
+- Kommentare auf Englisch, Oberfläche und Texte auf Deutsch.
+- WordPress-Standards: Nonces, Escaping/Sanitizing, `$wpdb->prepare()`, `dbDelta()` für Schemaänderungen, `wp_enqueue_*` für Assets.
